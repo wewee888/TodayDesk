@@ -8,11 +8,11 @@ import type {
   ReviewItem,
   ScheduleItem,
   WeeklyReportAI,
-} from '../types/study';
+} from '../types/study.ts';
 import {
   DEFAULT_EXTRACURRICULAR_ACTIVITIES,
   DEFAULT_PE_EXERCISES,
-} from '../utils/studyLogic';
+} from '../utils/studyLogic.ts';
 
 export const INITIAL_DESK_SETTINGS: DeskSettings = {
   studentName: '李子涵',

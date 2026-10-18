@@ -34,6 +34,7 @@ interface DeskSettingsModalProps {
     leaveNote?: string
   ) => void;
   onRenameSubjectGlobal?: (oldName: SubjectName, newName: SubjectName) => void;
+  onRenameSubject?: (oldName: SubjectName, newName: SubjectName) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -89,6 +90,7 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   onAddExtracurricularSchedule,
   onSyncActivityAttendance,
   onRenameSubjectGlobal,
+  onRenameSubject,
   onShowToast,
 }) => {
   // Top-level add form state for Extracurricular Hobby
@@ -472,8 +474,9 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
       customSubjects: nextCustom,
       activityConfigs: updatedConfigs,
     });
-    if (onRenameSubjectGlobal) {
-      onRenameSubjectGlobal(oldSubj, trimmed);
+    const renameFn = onRenameSubjectGlobal || onRenameSubject;
+    if (renameFn) {
+      renameFn(oldSubj, trimmed);
     }
     setRenamingSubject(null);
     onShowToast(`已将学科「${oldSubj}」修改为「${trimmed}」✓`);
