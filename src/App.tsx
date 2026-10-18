@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type {
   AttendanceStatus,
   DeskSettings,
@@ -26,6 +26,7 @@ import {
   calculateDeskSummary,
   clearMistakeItem,
   getSubjectBadgeClass,
+  getSubjectMeta,
   resolveReviewStatus,
 } from './utils/studyLogic';
 import { YesterdayReviewBanner } from './components/YesterdayReviewBanner';
@@ -43,14 +44,17 @@ import {
   type UserAccountProfile,
 } from './components/WelcomeAuthScreen';
 
+const STORAGE_KEY_DESK_SETTINGS = 'todaydesk_desk_settings_v1';
+const STORAGE_KEY_ACTIVE_USER = 'todaydesk_active_user_v1';
+const STORAGE_KEY_HOMEWORK_TASKS = 'todaydesk_homework_tasks_v1';
+const STORAGE_KEY_ACCOUNTS = 'warm_desk_registered_accounts_v1';
+
 export default function App() {
-  // Welcome Login / Registration screen state (supports ?autostart=1 to jump straight to desk)
+  // Welcome Login / Registration screen state (supports ?autostart=1 or persisted active user)
   const [currentUserProfile, setCurrentUserProfile] =
     useState<UserAccountProfile | null>(() => {
-      if (
-        typeof window !== 'undefined' &&
-        new URLSearchParams(window.location.search).get('autostart') === '1'
-      ) {
+      if (typeof window === 'undefined') return null;
+      if (new URLSearchParams(window.location.search).get('autostart') === '1') {
         return {
           account: 'lizihan',
           studentName: INITIAL_DESK_SETTINGS.studentName,
@@ -59,16 +63,33 @@ export default function App() {
           targetGoal: '稳步攻克数理压轴题 · 坚持每晚15分钟中考体育打卡',
         };
       }
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.studentName && parsed.gradeClass) {
+            return parsed;
+          }
+        }
+      } catch {}
       return null;
     });
+
   const [showWelcomeAuthScreen, setShowWelcomeAuthScreen] = useState<boolean>(
     () => {
-      if (
-        typeof window !== 'undefined' &&
-        new URLSearchParams(window.location.search).get('autostart') === '1'
-      ) {
+      if (typeof window === 'undefined') return true;
+      if (new URLSearchParams(window.location.search).get('autostart') === '1') {
         return false;
       }
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.studentName) {
+            return false;
+          }
+        }
+      } catch {}
       return true;
     }
   );
@@ -79,9 +100,28 @@ export default function App() {
   >('today');
 
   // Desk settings (student name, Pomodoro duration, PE exam exercises, extracurricular hobbies)
-  const [deskSettings, setDeskSettings] = useState<DeskSettings>(
-    INITIAL_DESK_SETTINGS
-  );
+  const [deskSettings, setDeskSettings] = useState<DeskSettings>(() => {
+    let base = { ...INITIAL_DESK_SETTINGS };
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_DESK_SETTINGS);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            base = { ...base, ...parsed };
+          }
+        }
+        const rawUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+        if (rawUser) {
+          const user = JSON.parse(rawUser);
+          if (user?.studentName) base.studentName = user.studentName;
+          if (user?.gradeClass) base.gradeClass = user.gradeClass;
+        }
+      } catch {}
+    }
+    return base;
+  });
+
   const [isDeskSettingsOpen, setIsDeskSettingsOpen] = useState(false);
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
 
@@ -92,9 +132,30 @@ export default function App() {
   const [schedules, setSchedules] = useState<ScheduleItem[]>(
     INITIAL_SCHEDULE_ITEMS
   );
-  const [homeworkTasks, setHomeworkTasks] = useState<HomeworkTask[]>(
-    INITIAL_HOMEWORK_TASKS
-  );
+  const [homeworkTasks, setHomeworkTasks] = useState<HomeworkTask[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_HOMEWORK_TASKS);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return INITIAL_HOMEWORK_TASKS;
+  });
+
+  // Automatically persist homeworkTasks whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_HOMEWORK_TASKS,
+        JSON.stringify(homeworkTasks)
+      );
+    } catch {}
+  }, [homeworkTasks]);
 
   // View 2 state: Quick 3-second capsule sheet modal
   const [isQuickSheetOpen, setIsQuickSheetOpen] = useState(false);
@@ -162,7 +223,7 @@ export default function App() {
             reasonIcon: 'photo_camera',
             reasonColorClass: 'text-primary',
             excerpt: `来自昨日作业「${targetItem.title}」拍照留存错题，周末集中清账销项。`,
-            iconFallback: 'menu_book',
+            iconFallback: getSubjectMeta(targetItem.subject).icon,
             cleared: false,
             ctaLabel: '已重做过关 ✓',
             ctaStyle: 'secondary',
@@ -252,11 +313,64 @@ export default function App() {
     );
   };
 
+  const handleUpdateDeskSettings = (nextSettings: DeskSettings) => {
+    setDeskSettings(nextSettings);
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_DESK_SETTINGS,
+        JSON.stringify(nextSettings)
+      );
+    } catch {}
+
+    // Synchronize to current active user profile and registered accounts database
+    setCurrentUserProfile((prev) => {
+      const updated: UserAccountProfile = prev
+        ? {
+            ...prev,
+            studentName: nextSettings.studentName,
+            gradeClass: nextSettings.gradeClass,
+          }
+        : {
+            account: 'lizihan',
+            studentName: nextSettings.studentName,
+            gradeClass: nextSettings.gradeClass,
+            role: 'student',
+            targetGoal: '稳步攻克数理压轴题 · 坚持每晚15分钟中考体育打卡',
+          };
+      try {
+        localStorage.setItem(
+          STORAGE_KEY_ACTIVE_USER,
+          JSON.stringify(updated)
+        );
+        const rawAccounts = localStorage.getItem(STORAGE_KEY_ACCOUNTS);
+        if (rawAccounts) {
+          const accounts = JSON.parse(rawAccounts);
+          if (Array.isArray(accounts)) {
+            const nextAccounts = accounts.map((acc: { account?: string }) =>
+              acc.account === updated.account
+                ? {
+                    ...acc,
+                    studentName: nextSettings.studentName,
+                    gradeClass: nextSettings.gradeClass,
+                  }
+                : acc
+            );
+            localStorage.setItem(
+              STORAGE_KEY_ACCOUNTS,
+              JSON.stringify(nextAccounts)
+            );
+          }
+        }
+      } catch {}
+      return updated;
+    });
+  };
+
   const handleUpdateCustomSubjects = (nextCustomSubjects: SubjectName[]) => {
-    setDeskSettings((prev) => ({
-      ...prev,
+    handleUpdateDeskSettings({
+      ...deskSettings,
       customSubjects: nextCustomSubjects,
-    }));
+    });
   };
 
   // Handlers for Today's Homework Tasks
@@ -469,19 +583,34 @@ export default function App() {
     isNewRegistration: boolean
   ) => {
     setCurrentUserProfile(profile);
-    setDeskSettings((prev) => ({
-      ...prev,
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(profile));
+    } catch {}
+
+    const updatedSettings: DeskSettings = {
+      ...deskSettings,
       studentName: profile.studentName,
       gradeClass: profile.gradeClass,
-    }));
+    };
+    setDeskSettings(updatedSettings);
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_DESK_SETTINGS,
+        JSON.stringify(updatedSettings)
+      );
+    } catch {}
+
     setShowWelcomeAuthScreen(false);
     if (isNewRegistration) {
       setHomeworkTasks([]);
+      try {
+        localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify([]));
+      } catch {}
     }
     showToast(
       isNewRegistration
-        ? `注册成功！已为您创建「${profile.studentName}」的全新专属书桌，快来录入第一条作业吧 ✨`
-        : `欢迎回来，${profile.studentName}（${
+        ? `注册成功！已为您创建「${profile.studentName}」(${profile.gradeClass})的全新专属书桌，快来录入第一条作业吧 ✨`
+        : `欢迎回来，${profile.studentName}（${profile.gradeClass} · ${
             profile.role === 'parent' ? '家长伴学' : '学生书桌'
           }）✨`
     );
@@ -513,10 +642,17 @@ export default function App() {
           ),
         ])
       );
-      return {
+      const nextSettings = {
         ...prev,
         customSubjects: merged,
       };
+      try {
+        localStorage.setItem(
+          STORAGE_KEY_DESK_SETTINGS,
+          JSON.stringify(nextSettings)
+        );
+      } catch {}
+      return nextSettings;
     });
 
     // 2. Optionally sync detected academic subjects into exam score cards
@@ -533,7 +669,7 @@ export default function App() {
             currentCards.push({
               id: `tt-score-${Date.now()}-${idx}`,
               subject: subj,
-              icon: 'menu_book',
+              icon: getSubjectMeta(subj).icon,
               score: 92,
               fullScore: 100,
               trendText: '课表同步学科',
@@ -756,7 +892,12 @@ export default function App() {
             <button
               type="button"
               aria-label="切换账号或打开登录注册欢迎页"
-              onClick={() => setShowWelcomeAuthScreen(true)}
+              onClick={() => {
+                try {
+                  localStorage.removeItem(STORAGE_KEY_ACTIVE_USER);
+                } catch {}
+                setShowWelcomeAuthScreen(true);
+              }}
               className="px-2.5 py-1 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap"
               title="切换账号 / 返回欢迎登录注册页"
             >
@@ -806,9 +947,22 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-on-surface-variant font-semibold">
-                    {deskSettings.gradeClass} · {deskSettings.studentName}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsDeskSettingsOpen(true)}
+                    title="点击快速修改所在班级与学生姓名"
+                    className="px-2.5 py-1 rounded-full bg-surface-container-low hover:bg-surface-container text-xs text-on-surface font-semibold flex items-center gap-1.5 cursor-pointer transition-all border border-[#EAE4DA] hover:border-primary/50 active:scale-95 shadow-2xs"
+                  >
+                    <span className="material-symbols-outlined text-[14px] text-primary">
+                      school
+                    </span>
+                    <span>
+                      {deskSettings.gradeClass} · {deskSettings.studentName}
+                    </span>
+                    <span className="material-symbols-outlined text-[13px] text-outline">
+                      edit
+                    </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsTimetableModalOpen(true)}
@@ -1133,7 +1287,7 @@ export default function App() {
         isOpen={isDeskSettingsOpen}
         onClose={() => setIsDeskSettingsOpen(false)}
         settings={deskSettings}
-        onUpdateSettings={setDeskSettings}
+        onUpdateSettings={handleUpdateDeskSettings}
         onQuickAddExtracurricularTask={(subject, activityName, minutes, title) =>
           handleAddTaskFromCapsule(subject, activityName, minutes, title)
         }

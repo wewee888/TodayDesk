@@ -8,6 +8,7 @@ import {
   clampTaskDuration,
   clearMistakeItem,
   formatPomodoroTime,
+  getSubjectMeta,
   getTaskPresetsForSubject,
   parseTimetableContent,
   parseVoiceCommandLocal,
@@ -172,6 +173,53 @@ test('parseTimetableContent and buildSmartExamPeriods handle curriculum detectio
   const withPrep = buildSmartExamPeriods(11, 'with_prep');
   assert.equal(withPrep.includes('期中预备'), true);
   assert.equal(withPrep.includes('期中考试'), true);
+});
+
+test('getSubjectMeta accurately maps junior and senior high school subjects to distinct icons and colors', () => {
+  const chinese = getSubjectMeta('语文');
+  assert.equal(chinese.icon, 'stylus_note');
+  assert.equal(chinese.category, '主科');
+
+  const physics = getSubjectMeta('物理');
+  assert.equal(physics.icon, 'electric_bolt');
+  assert.equal(physics.category, '理科');
+
+  const chemistry = getSubjectMeta('化学');
+  assert.equal(chemistry.icon, 'science');
+  assert.equal(chemistry.category, '理科');
+
+  const history = getSubjectMeta('历史');
+  assert.equal(history.icon, 'history_edu');
+  assert.equal(history.category, '文科');
+
+  const politics = getSubjectMeta('思想政治');
+  assert.equal(politics.icon, 'policy');
+  assert.equal(politics.category, '文科');
+
+  const science = getSubjectMeta('科学');
+  assert.equal(science.icon, 'experiment');
+  assert.equal(science.category, '理科');
+
+  const it = getSubjectMeta('信息科技');
+  assert.equal(it.icon, 'terminal');
+  assert.equal(it.category, '技术');
+
+  const pe = getSubjectMeta('体育中考');
+  assert.equal(pe.icon, 'directions_run');
+  assert.equal(pe.category, '体健');
+
+  const olympiad = getSubjectMeta('奥数');
+  assert.equal(olympiad.icon, 'functions');
+
+  const coding = getSubjectMeta('编程');
+  assert.equal(coding.icon, 'code');
+
+  // Test dynamic fuzzy matching fallback
+  const customRobotics = getSubjectMeta('青少年机器人社团');
+  assert.equal(customRobotics.icon, 'smart_toy');
+
+  const customMusic = getSubjectMeta('管乐团长笛');
+  assert.equal(customMusic.icon, 'music_note');
 });
 
 

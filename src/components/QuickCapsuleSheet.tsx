@@ -4,6 +4,7 @@ import {
   RECOMMENDED_EXTRA_SUBJECTS,
   buildTaskTitle,
   clampTaskDuration,
+  getSubjectMeta,
   getTaskPresetsForSubject,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
@@ -30,36 +31,35 @@ interface QuickCapsuleSheetProps {
   inlineMode?: boolean;
 }
 
+const BASE_SUBJECT_NAMES: SubjectName[] = [
+  '语文',
+  '数学',
+  '英语',
+  '物理',
+  '化学',
+  '生物',
+  '历史',
+  '地理',
+  '道法',
+  '科学',
+  '信息科技',
+  '体育锻炼',
+  '课余兴趣',
+  '自主自习',
+];
+
 const BASE_SUBJECT_OPTIONS: {
   label: SubjectName;
   icon: string;
   iconColorClass: string;
-}[] = [
-  { label: '语文', icon: 'stylus_note', iconColorClass: 'text-tertiary' },
-  { label: '数学', icon: 'square_foot', iconColorClass: 'text-primary' },
-  { label: '英语', icon: 'translate', iconColorClass: 'text-secondary' },
-  { label: '物理', icon: 'electric_bolt', iconColorClass: 'text-[#5B82A6]' },
-  { label: '化学', icon: 'science', iconColorClass: 'text-[#8C7AA9]' },
-  { label: '历史', icon: 'history_edu', iconColorClass: 'text-[#B87D5B]' },
-  { label: '地理', icon: 'public', iconColorClass: 'text-[#3B7A67]' },
-  { label: '生物', icon: 'biotech', iconColorClass: 'text-[#527D3B]' },
-  { label: '道法', icon: 'gavel', iconColorClass: 'text-[#B4544D]' },
-  {
-    label: '体育锻炼',
-    icon: 'directions_run',
-    iconColorClass: 'text-secondary',
-  },
-  {
-    label: '课余兴趣',
-    icon: 'interests',
-    iconColorClass: 'text-tertiary',
-  },
-  {
-    label: '自主自习',
-    icon: 'self_improvement',
-    iconColorClass: 'text-secondary',
-  },
-];
+}[] = BASE_SUBJECT_NAMES.map((name) => {
+  const meta = getSubjectMeta(name);
+  return {
+    label: name,
+    icon: meta.icon,
+    iconColorClass: meta.iconColorClass,
+  };
+});
 
 // PE & Quick duration presets: 5, 10, 15, 20, 25, 30, 45 + 60, 90
 const PE_TIME_PRESETS = [5, 10, 15, 20, 25, 30, 45];
@@ -103,11 +103,14 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
 
   const extraSubjectItems = combinedCustom
     .filter((s) => !BASE_SUBJECT_OPTIONS.some((b) => b.label === s))
-    .map((s) => ({
-      label: s,
-      icon: 'menu_book',
-      iconColorClass: 'text-primary',
-    }));
+    .map((s) => {
+      const meta = getSubjectMeta(s);
+      return {
+        label: s,
+        icon: meta.icon,
+        iconColorClass: meta.iconColorClass,
+      };
+    });
 
   const allSubjectOptions = [...BASE_SUBJECT_OPTIONS, ...extraSubjectItems];
 
@@ -400,16 +403,24 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
                 <span className="text-[10px] text-outline">一键添加：</span>
                 {RECOMMENDED_EXTRA_SUBJECTS.filter(
                   (s) => !allSubjectOptions.some((o) => o.label === s)
-                ).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => handleCreateNewSubject(s)}
-                    className="px-2 py-0.5 rounded-full bg-white hover:bg-primary-fixed/50 text-[11px] text-on-surface-variant border border-[#EAE4DA] cursor-pointer whitespace-nowrap"
-                  >
-                    + {s}
-                  </button>
-                ))}
+                ).map((s) => {
+                  const m = getSubjectMeta(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleCreateNewSubject(s)}
+                      className="px-2 py-0.5 rounded-full bg-white hover:bg-primary-fixed/50 text-[11px] text-on-surface-variant border border-[#EAE4DA] cursor-pointer whitespace-nowrap inline-flex items-center gap-1"
+                    >
+                      <span
+                        className={`material-symbols-outlined text-[12px] ${m.iconColorClass}`}
+                      >
+                        {m.icon}
+                      </span>
+                      <span>+ {s}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Rename selected subject row */}

@@ -12,6 +12,7 @@ import { MultiPeriodReportSection } from './MultiPeriodReportSection';
 import {
   type SchoolExamScheduleMode,
   buildSmartExamPeriods,
+  getSubjectMeta,
   resolveRecommendedExamPeriod,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
@@ -173,7 +174,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
     const nextCard: ExamScoreCard = {
       id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       subject: trimmed,
-      icon: 'menu_book',
+      icon: getSubjectMeta(trimmed).icon,
       score: Math.min(defaultScore, defaultFull),
       fullScore: defaultFull,
       trendText: '新增学科',
@@ -975,16 +976,24 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                   new Set([...EXTRA_EXAM_SUBJECTS, ...(customSubjects || [])])
                 )
                   .filter((s) => !draftCards.some((c) => c.subject === s))
-                  .map((subj) => (
-                    <button
-                      key={subj}
-                      type="button"
-                      onClick={() => handleAddDraftSubject(subj, 92, 100)}
-                      className="px-2 py-0.5 rounded-full bg-white hover:bg-secondary-container text-[10px] text-on-surface-variant border border-[#EAE4DA] cursor-pointer"
-                    >
-                      + {subj}
-                    </button>
-                  ))}
+                  .map((subj) => {
+                    const meta = getSubjectMeta(subj);
+                    return (
+                      <button
+                        key={subj}
+                        type="button"
+                        onClick={() => handleAddDraftSubject(subj, 92, 100)}
+                        className="px-2 py-0.5 rounded-full bg-white hover:bg-secondary-container text-[10px] text-on-surface-variant border border-[#EAE4DA] cursor-pointer inline-flex items-center gap-0.5"
+                      >
+                        <span
+                          className={`material-symbols-outlined text-[11px] ${meta.iconColorClass}`}
+                        >
+                          {meta.icon}
+                        </span>
+                        <span>+ {subj}</span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
 
@@ -1098,9 +1107,12 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               >
                 <div className="flex items-center justify-between gap-1">
                   <span
-                    className={`text-[13px] font-bold tracking-tight truncate ${titleColor}`}
+                    className={`text-[13px] font-bold tracking-tight truncate inline-flex items-center gap-1 ${titleColor}`}
                   >
-                    {card.subject}
+                    <span className="material-symbols-outlined text-[15px] shrink-0">
+                      {getSubjectMeta(card.subject).icon}
+                    </span>
+                    <span className="truncate">{card.subject}</span>
                   </span>
                   <span className="material-symbols-outlined text-[14px] text-outline group-hover:text-primary transition-colors shrink-0">
                     edit

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   ActivityConfigItem,
   AttendanceStatus,
@@ -119,6 +119,19 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   const [pomodoroMinutes, setPomodoroMinutes] = useState(
     settings.pomodoroMinutes
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      setStudentName(settings.studentName);
+      setGradeClass(settings.gradeClass);
+      setPomodoroMinutes(settings.pomodoroMinutes);
+    }
+  }, [
+    isOpen,
+    settings.studentName,
+    settings.gradeClass,
+    settings.pomodoroMinutes,
+  ]);
 
   // Quick Today Duration Picker state (opens when clicking "+ 记今日")
   const [quickLogTargetName, setQuickLogTargetName] = useState<string | null>(
@@ -484,13 +497,15 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
 
   const handleSaveBasicSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextStudent = studentName.trim() || '李子涵';
+    const nextGrade = gradeClass.trim() || '初二 (3) 班';
     onUpdateSettings({
       ...settings,
-      studentName: studentName.trim() || '李子涵',
-      gradeClass: gradeClass.trim() || '初二 (3) 班',
+      studentName: nextStudent,
+      gradeClass: nextGrade,
       pomodoroMinutes,
     });
-    onShowToast('家庭书桌设置已保存 ✓');
+    onShowToast(`已保存班级与学生设置：${nextGrade} · ${nextStudent} ✓`);
     onClose();
   };
 
@@ -953,6 +968,113 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
 
         {/* Scrollable Content */}
         <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-0.5">
+          {/* Section 0: 孩子信息、所在班级与番茄钟专注设置 (置顶核心，即改即生效) */}
+          <form
+            id="desk-settings-form"
+            onSubmit={handleSaveBasicSettings}
+            className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-primary-fixed/20 to-surface-container-lowest border border-primary/25 space-y-3 shadow-xs"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[16px]">
+                    school
+                  </span>
+                </div>
+                <span className="text-[13px] font-bold text-on-surface">
+                  🎓 孩子姓名与所在年级/班级设置
+                </span>
+              </div>
+              <button
+                type="submit"
+                className="px-3.5 py-1.5 rounded-full bg-primary text-on-primary text-xs font-semibold shadow-xs hover:bg-primary-container cursor-pointer flex items-center gap-1 active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[14px]">save</span>
+                <span>保存更正</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-on-surface-variant font-medium">
+                  孩子姓名 / 昵称
+                </span>
+                <input
+                  type="text"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  placeholder="如：李子涵"
+                  className="bg-white rounded-xl px-3 py-2 border border-outline-variant/60 text-on-surface font-semibold focus:outline-none focus:border-primary shadow-2xs"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-on-surface-variant font-medium">
+                  所在年级 / 班级
+                </span>
+                <input
+                  type="text"
+                  value={gradeClass}
+                  onChange={(e) => setGradeClass(e.target.value)}
+                  placeholder="如：初一(1)班、初二(3)班、高一(2)班..."
+                  className="bg-white rounded-xl px-3 py-2 border border-outline-variant/60 text-primary font-bold focus:outline-none focus:border-primary shadow-2xs"
+                />
+              </label>
+            </div>
+
+            {/* Quick Class Presets for instant 1-tap select */}
+            <div className="flex items-center gap-1 flex-wrap pt-0.5">
+              <span className="text-[10px] text-outline shrink-0">快捷选班：</span>
+              {[
+                '初一 (1) 班',
+                '初一 (3) 班',
+                '初二 (3) 班',
+                '初二 (6) 班',
+                '初三 (1) 班',
+                '初三 (6) 班',
+                '高一 (1) 班',
+                '高二 (2) 班',
+                '高三 (1) 班',
+              ].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setGradeClass(c)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer ${
+                    gradeClass === c
+                      ? 'bg-primary text-on-primary font-semibold'
+                      : 'bg-white text-on-surface-variant hover:bg-surface-container border border-[#EAE4DA]'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1.5 pt-1 border-t border-[#EAE4DA]/60">
+              <span className="text-xs text-on-surface-variant font-medium block">
+                番茄钟单次默认专注时长：
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {[25, 35, 45].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setPomodoroMinutes(mins)}
+                    className={`py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      pomodoroMinutes === mins
+                        ? 'bg-primary text-on-primary border-primary shadow-2xs'
+                        : 'bg-white text-on-surface-variant border-outline-variant/40 hover:bg-surface-container'
+                    }`}
+                  >
+                    {mins} 分钟{' '}
+                    {mins === 25 ? '(标准)' : mins === 45 ? '(长专注)' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </form>
+
           {/* Section 1: 周末与课余兴趣活动库 */}
           <div className="p-3 sm:p-3.5 rounded-2xl bg-surface-container-low border border-[#EAE4DA]/80 space-y-2.5">
             {/* Section Header with Prominent "+ 新增项目" button right at the top! */}
@@ -1731,66 +1853,6 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Section 4: 孩子信息与番茄钟默认时长 */}
-          <form
-            id="desk-settings-form"
-            onSubmit={handleSaveBasicSettings}
-            className="p-3 sm:p-3.5 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] space-y-3"
-          >
-            <span className="text-xs font-bold text-on-surface block">
-              ⏱️ 专注番茄钟与学生信息设置
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <label className="flex flex-col gap-1 text-xs">
-                <span className="text-on-surface-variant font-medium">
-                  孩子姓名/昵称
-                </span>
-                <input
-                  type="text"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  className="bg-surface-container-low rounded-xl px-3 py-2 border border-outline-variant/40 text-on-surface font-semibold focus:outline-none focus:border-primary"
-                />
-              </label>
-
-              <label className="flex flex-col gap-1 text-xs">
-                <span className="text-on-surface-variant font-medium">
-                  所在年级/班级
-                </span>
-                <input
-                  type="text"
-                  value={gradeClass}
-                  onChange={(e) => setGradeClass(e.target.value)}
-                  className="bg-surface-container-low rounded-xl px-3 py-2 border border-outline-variant/40 text-on-surface font-semibold focus:outline-none focus:border-primary"
-                />
-              </label>
-            </div>
-
-            <div className="space-y-1.5">
-              <span className="text-xs text-on-surface-variant font-medium block">
-                番茄钟单次默认专注时长：
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {[25, 35, 45].map((mins) => (
-                  <button
-                    key={mins}
-                    type="button"
-                    onClick={() => setPomodoroMinutes(mins)}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                      pomodoroMinutes === mins
-                        ? 'bg-primary text-on-primary border-primary shadow-2xs'
-                        : 'bg-surface-container-low text-on-surface-variant border-transparent hover:bg-surface-container'
-                    }`}
-                  >
-                    {mins} 分钟{' '}
-                    {mins === 25 ? '(标准)' : mins === 45 ? '(长专注)' : ''}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </form>
         </div>
 
         {/* Footer */}

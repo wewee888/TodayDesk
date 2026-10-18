@@ -7,6 +7,7 @@ import {
   clampTaskDuration,
   formatPomodoroTime,
   getSubjectBadgeClass,
+  getSubjectMeta,
 } from '../utils/studyLogic';
 
 interface TodayHomeworkListProps {
@@ -335,9 +336,14 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                   <span
-                    className={`px-2.5 py-0.5 rounded-lg text-xs font-bold shrink-0 ${task.subjectBadgeClass}`}
+                    className={`px-2.5 py-0.5 rounded-lg text-xs font-bold shrink-0 inline-flex items-center gap-1 ${
+                      task.subjectBadgeClass || getSubjectMeta(task.subject).badgeClass
+                    }`}
                   >
-                    {task.subject}
+                    <span className="material-symbols-outlined text-[13px]">
+                      {getSubjectMeta(task.subject).icon}
+                    </span>
+                    <span>{task.subject}</span>
                   </span>
                   <span className="text-xs text-on-surface-variant font-medium truncate max-w-[150px] sm:max-w-none">
                     {task.taskType}
@@ -480,20 +486,31 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                       所属科目 / 领域（支持点选或手动输入自定义学科）：
                     </span>
                     <div className="flex flex-wrap gap-1">
-                      {availableSubjects.map((subj) => (
-                        <button
-                          key={subj}
-                          type="button"
-                          onClick={() => setEditSubject(subj)}
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
-                            editSubject === subj
-                              ? 'bg-primary text-on-primary font-semibold'
-                              : 'bg-white text-on-surface-variant border border-outline-variant/40'
-                          }`}
-                        >
-                          {subj}
-                        </button>
-                      ))}
+                      {availableSubjects.map((subj) => {
+                        const meta = getSubjectMeta(subj);
+                        const isSelected = editSubject === subj;
+                        return (
+                          <button
+                            key={subj}
+                            type="button"
+                            onClick={() => setEditSubject(subj)}
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-primary text-on-primary font-semibold'
+                                : 'bg-white text-on-surface-variant border border-outline-variant/40'
+                            }`}
+                          >
+                            <span
+                              className={`material-symbols-outlined text-[12px] ${
+                                isSelected ? 'text-on-primary' : meta.iconColorClass
+                              }`}
+                            >
+                              {meta.icon}
+                            </span>
+                            <span>{subj}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

@@ -11,23 +11,661 @@ import type {
   TimetableRecognitionResult,
 } from '../types/study.ts';
 
-export const SUBJECT_BADGE_MAP: Record<SubjectName, string> = {
-  语文: 'bg-primary-fixed/40 text-primary',
-  数学: 'bg-secondary-container/50 text-secondary',
-  英语: 'bg-tertiary-fixed/40 text-tertiary',
-  物理: 'bg-[#EDF4F8] text-[#5B82A6]',
-  化学: 'bg-[#F4F1F8] text-[#8C7AA9]',
-  历史: 'bg-[#FDF4E3] text-[#B87D5B]',
-  道法: 'bg-[#FDECEB] text-[#B4544D]',
-  政治: 'bg-[#FDECEB] text-[#B4544D]',
-  地理: 'bg-[#EAF5F1] text-[#3B7A67]',
-  生物: 'bg-[#EEF6E8] text-[#527D3B]',
-  科学: 'bg-[#EBF3FA] text-[#3E6B99]',
-  信息科技: 'bg-[#EEF0F8] text-[#556299]',
-  体育锻炼: 'bg-secondary-container/70 text-on-secondary-container',
-  课余兴趣: 'bg-tertiary-fixed/60 text-on-tertiary-fixed-variant',
-  自主自习: 'bg-secondary-container/40 text-on-secondary-container',
+export interface SubjectMeta {
+  label: SubjectName;
+  icon: string;
+  iconColorClass: string;
+  badgeClass: string;
+  isAcademic: boolean;
+  category: '主科' | '理科' | '文科' | '技术' | '艺术' | '体健' | '实践' | '兴趣' | '自习';
+}
+
+export const SUBJECT_CATALOG: Record<string, SubjectMeta> = {
+  // 1. 基础主科 (中考/高考核心)
+  语文: {
+    label: '语文',
+    icon: 'stylus_note',
+    iconColorClass: 'text-primary',
+    badgeClass: 'bg-primary-fixed/40 text-primary',
+    isAcademic: true,
+    category: '主科',
+  },
+  数学: {
+    label: '数学',
+    icon: 'square_foot',
+    iconColorClass: 'text-secondary',
+    badgeClass: 'bg-secondary-container/50 text-secondary',
+    isAcademic: true,
+    category: '主科',
+  },
+  英语: {
+    label: '英语',
+    icon: 'translate',
+    iconColorClass: 'text-tertiary',
+    badgeClass: 'bg-tertiary-fixed/40 text-tertiary',
+    isAcademic: true,
+    category: '主科',
+  },
+  外语: {
+    label: '外语',
+    icon: 'translate',
+    iconColorClass: 'text-tertiary',
+    badgeClass: 'bg-tertiary-fixed/40 text-tertiary',
+    isAcademic: true,
+    category: '主科',
+  },
+  日语: {
+    label: '日语',
+    icon: 'temple_buddhist',
+    iconColorClass: 'text-[#C71585]',
+    badgeClass: 'bg-[#FFF0F5] text-[#C71585]',
+    isAcademic: true,
+    category: '主科',
+  },
+  俄语: {
+    label: '俄语',
+    icon: 'language',
+    iconColorClass: 'text-[#4169E1]',
+    badgeClass: 'bg-[#F0F8FF] text-[#4169E1]',
+    isAcademic: true,
+    category: '主科',
+  },
+
+  // 2. 自然科学/理科组 (初中与高中选考)
+  物理: {
+    label: '物理',
+    icon: 'electric_bolt',
+    iconColorClass: 'text-[#5B82A6]',
+    badgeClass: 'bg-[#EDF4F8] text-[#5B82A6]',
+    isAcademic: true,
+    category: '理科',
+  },
+  化学: {
+    label: '化学',
+    icon: 'science',
+    iconColorClass: 'text-[#8C7AA9]',
+    badgeClass: 'bg-[#F4F1F8] text-[#8C7AA9]',
+    isAcademic: true,
+    category: '理科',
+  },
+  生物: {
+    label: '生物',
+    icon: 'biotech',
+    iconColorClass: 'text-[#527D3B]',
+    badgeClass: 'bg-[#EEF6E8] text-[#527D3B]',
+    isAcademic: true,
+    category: '理科',
+  },
+  科学: {
+    label: '科学',
+    icon: 'experiment',
+    iconColorClass: 'text-[#3E6B99]',
+    badgeClass: 'bg-[#EBF3FA] text-[#3E6B99]',
+    isAcademic: true,
+    category: '理科',
+  },
+
+  // 3. 人文社科/文科组 (初中与高中选考)
+  历史: {
+    label: '历史',
+    icon: 'history_edu',
+    iconColorClass: 'text-[#B87D5B]',
+    badgeClass: 'bg-[#FDF4E3] text-[#B87D5B]',
+    isAcademic: true,
+    category: '文科',
+  },
+  地理: {
+    label: '地理',
+    icon: 'public',
+    iconColorClass: 'text-[#3B7A67]',
+    badgeClass: 'bg-[#EAF5F1] text-[#3B7A67]',
+    isAcademic: true,
+    category: '文科',
+  },
+  道法: {
+    label: '道法',
+    icon: 'gavel',
+    iconColorClass: 'text-[#B4544D]',
+    badgeClass: 'bg-[#FDECEB] text-[#B4544D]',
+    isAcademic: true,
+    category: '文科',
+  },
+  道德与法治: {
+    label: '道德与法治',
+    icon: 'gavel',
+    iconColorClass: 'text-[#B4544D]',
+    badgeClass: 'bg-[#FDECEB] text-[#B4544D]',
+    isAcademic: true,
+    category: '文科',
+  },
+  政治: {
+    label: '政治',
+    icon: 'policy',
+    iconColorClass: 'text-[#B4544D]',
+    badgeClass: 'bg-[#FDECEB] text-[#B4544D]',
+    isAcademic: true,
+    category: '文科',
+  },
+  思想政治: {
+    label: '思想政治',
+    icon: 'policy',
+    iconColorClass: 'text-[#B4544D]',
+    badgeClass: 'bg-[#FDECEB] text-[#B4544D]',
+    isAcademic: true,
+    category: '文科',
+  },
+
+  // 4. 新高考技术与综合工程选考
+  信息科技: {
+    label: '信息科技',
+    icon: 'terminal',
+    iconColorClass: 'text-[#556299]',
+    badgeClass: 'bg-[#EEF0F8] text-[#556299]',
+    isAcademic: true,
+    category: '技术',
+  },
+  信息技术: {
+    label: '信息技术',
+    icon: 'terminal',
+    iconColorClass: 'text-[#556299]',
+    badgeClass: 'bg-[#EEF0F8] text-[#556299]',
+    isAcademic: true,
+    category: '技术',
+  },
+  计算机: {
+    label: '计算机',
+    icon: 'laptop_mac',
+    iconColorClass: 'text-[#556299]',
+    badgeClass: 'bg-[#EEF0F8] text-[#556299]',
+    isAcademic: true,
+    category: '技术',
+  },
+  通用技术: {
+    label: '通用技术',
+    icon: 'precision_manufacturing',
+    iconColorClass: 'text-[#546E7A]',
+    badgeClass: 'bg-[#ECEFF1] text-[#546E7A]',
+    isAcademic: true,
+    category: '技术',
+  },
+
+  // 5. 艺术美育与书法
+  音乐: {
+    label: '音乐',
+    icon: 'music_note',
+    iconColorClass: 'text-[#C2185B]',
+    badgeClass: 'bg-[#FCE4EC] text-[#C2185B]',
+    isAcademic: false,
+    category: '艺术',
+  },
+  美术: {
+    label: '美术',
+    icon: 'palette',
+    iconColorClass: 'text-[#E65100]',
+    badgeClass: 'bg-[#FFF3E0] text-[#E65100]',
+    isAcademic: false,
+    category: '艺术',
+  },
+  艺术: {
+    label: '艺术',
+    icon: 'palette',
+    iconColorClass: 'text-[#E65100]',
+    badgeClass: 'bg-[#FFF3E0] text-[#E65100]',
+    isAcademic: false,
+    category: '艺术',
+  },
+  书法: {
+    label: '书法',
+    icon: 'draw',
+    iconColorClass: 'text-[#5D4037]',
+    badgeClass: 'bg-[#EFEBE9] text-[#5D4037]',
+    isAcademic: false,
+    category: '艺术',
+  },
+
+  // 6. 体育锻炼与身心健康 (中考体育计入总分)
+  体育锻炼: {
+    label: '体育锻炼',
+    icon: 'directions_run',
+    iconColorClass: 'text-secondary',
+    badgeClass: 'bg-secondary-container/70 text-on-secondary-container',
+    isAcademic: true,
+    category: '体健',
+  },
+  体育: {
+    label: '体育',
+    icon: 'directions_run',
+    iconColorClass: 'text-secondary',
+    badgeClass: 'bg-secondary-container/70 text-on-secondary-container',
+    isAcademic: true,
+    category: '体健',
+  },
+  心理健康: {
+    label: '心理健康',
+    icon: 'psychology',
+    iconColorClass: 'text-[#7B1FA2]',
+    badgeClass: 'bg-[#F3E5F5] text-[#7B1FA2]',
+    isAcademic: false,
+    category: '体健',
+  },
+  心理: {
+    label: '心理',
+    icon: 'psychology',
+    iconColorClass: 'text-[#7B1FA2]',
+    badgeClass: 'bg-[#F3E5F5] text-[#7B1FA2]',
+    isAcademic: false,
+    category: '体健',
+  },
+
+  // 7. 劳动实践与综合研学
+  劳动: {
+    label: '劳动',
+    icon: 'handyman',
+    iconColorClass: 'text-[#33691E]',
+    badgeClass: 'bg-[#F1F8E9] text-[#33691E]',
+    isAcademic: false,
+    category: '实践',
+  },
+  劳动教育: {
+    label: '劳动教育',
+    icon: 'handyman',
+    iconColorClass: 'text-[#33691E]',
+    badgeClass: 'bg-[#F1F8E9] text-[#33691E]',
+    isAcademic: false,
+    category: '实践',
+  },
+  综合实践: {
+    label: '综合实践',
+    icon: 'explore',
+    iconColorClass: 'text-[#00695C]',
+    badgeClass: 'bg-[#E0F2F1] text-[#00695C]',
+    isAcademic: false,
+    category: '实践',
+  },
+
+  // 8. 拔尖竞赛与科创
+  奥数: {
+    label: '奥数',
+    icon: 'functions',
+    iconColorClass: 'text-[#FF8F00]',
+    badgeClass: 'bg-[#FFF8E1] text-[#FF8F00]',
+    isAcademic: true,
+    category: '主科',
+  },
+  科创: {
+    label: '科创',
+    icon: 'smart_toy',
+    iconColorClass: 'text-[#0277BD]',
+    badgeClass: 'bg-[#E1F5FE] text-[#0277BD]',
+    isAcademic: false,
+    category: '实践',
+  },
+  机器人: {
+    label: '机器人',
+    icon: 'smart_toy',
+    iconColorClass: 'text-[#0277BD]',
+    badgeClass: 'bg-[#E1F5FE] text-[#0277BD]',
+    isAcademic: false,
+    category: '实践',
+  },
+  编程: {
+    label: '编程',
+    icon: 'code',
+    iconColorClass: 'text-[#0288D1]',
+    badgeClass: 'bg-[#E1F5FE] text-[#0288D1]',
+    isAcademic: true,
+    category: '技术',
+  },
+  航模: {
+    label: '航模',
+    icon: 'flight',
+    iconColorClass: 'text-[#0277BD]',
+    badgeClass: 'bg-[#E1F5FE] text-[#0277BD]',
+    isAcademic: false,
+    category: '实践',
+  },
+
+  // 9. 中高考专项与特色学科
+  体育中考: {
+    label: '体育中考',
+    icon: 'directions_run',
+    iconColorClass: 'text-secondary',
+    badgeClass: 'bg-secondary-container/70 text-on-secondary-container',
+    isAcademic: true,
+    category: '体健',
+  },
+  生物学: {
+    label: '生物学',
+    icon: 'biotech',
+    iconColorClass: 'text-[#527D3B]',
+    badgeClass: 'bg-[#EEF6E8] text-[#527D3B]',
+    isAcademic: true,
+    category: '理科',
+  },
+  阅读: {
+    label: '阅读',
+    icon: 'menu_book',
+    iconColorClass: 'text-[#6D4C41]',
+    badgeClass: 'bg-[#EFEBE9] text-[#6D4C41]',
+    isAcademic: true,
+    category: '主科',
+  },
+  名著阅读: {
+    label: '名著阅读',
+    icon: 'auto_stories',
+    iconColorClass: 'text-[#6D4C41]',
+    badgeClass: 'bg-[#EFEBE9] text-[#6D4C41]',
+    isAcademic: true,
+    category: '主科',
+  },
+  作文: {
+    label: '作文',
+    icon: 'stylus_note',
+    iconColorClass: 'text-primary',
+    badgeClass: 'bg-primary-fixed/40 text-primary',
+    isAcademic: true,
+    category: '主科',
+  },
+  法语: {
+    label: '法语',
+    icon: 'language',
+    iconColorClass: 'text-[#1E88E5]',
+    badgeClass: 'bg-[#E3F2FD] text-[#1E88E5]',
+    isAcademic: true,
+    category: '主科',
+  },
+  德语: {
+    label: '德语',
+    icon: 'language',
+    iconColorClass: 'text-[#F57C00]',
+    badgeClass: 'bg-[#FFF3E0] text-[#F57C00]',
+    isAcademic: true,
+    category: '主科',
+  },
+  西班牙语: {
+    label: '西班牙语',
+    icon: 'language',
+    iconColorClass: 'text-[#E64A19]',
+    badgeClass: 'bg-[#FBE9E7] text-[#E64A19]',
+    isAcademic: true,
+    category: '主科',
+  },
+  健康教育: {
+    label: '健康教育',
+    icon: 'health_and_safety',
+    iconColorClass: 'text-[#2E7D32]',
+    badgeClass: 'bg-[#E8F5E9] text-[#2E7D32]',
+    isAcademic: false,
+    category: '体健',
+  },
+  研学实践: {
+    label: '研学实践',
+    icon: 'explore',
+    iconColorClass: 'text-[#00838F]',
+    badgeClass: 'bg-[#E0F7FA] text-[#00838F]',
+    isAcademic: false,
+    category: '实践',
+  },
+
+  // 10. 自主自律与课余专栏
+  自主自习: {
+    label: '自主自习',
+    icon: 'self_improvement',
+    iconColorClass: 'text-secondary',
+    badgeClass: 'bg-secondary-container/40 text-on-secondary-container',
+    isAcademic: false,
+    category: '自习',
+  },
+  课余兴趣: {
+    label: '课余兴趣',
+    icon: 'interests',
+    iconColorClass: 'text-tertiary',
+    badgeClass: 'bg-tertiary-fixed/60 text-on-tertiary-fixed-variant',
+    isAcademic: false,
+    category: '兴趣',
+  },
 };
+
+/**
+ * 智能获取任意初高中学科的图标、颜色与徽章样式 (支持模糊推断与智能兜底)
+ */
+export function getSubjectMeta(subject: string): SubjectMeta {
+  const trimmed = String(subject || '').trim();
+  if (SUBJECT_CATALOG[trimmed]) {
+    return SUBJECT_CATALOG[trimmed];
+  }
+
+  // 智能模糊匹配关键词
+  if (trimmed.includes('语') || trimmed.includes('文') || trimmed.includes('阅读') || trimmed.includes('作文')) {
+    return {
+      label: trimmed,
+      icon: 'stylus_note',
+      iconColorClass: 'text-primary',
+      badgeClass: 'bg-primary-fixed/40 text-primary',
+      isAcademic: true,
+      category: '主科',
+    };
+  }
+  if (trimmed.includes('数') || trimmed.includes('算') || trimmed.includes('几') || trimmed.includes('代')) {
+    return {
+      label: trimmed,
+      icon: 'square_foot',
+      iconColorClass: 'text-secondary',
+      badgeClass: 'bg-secondary-container/50 text-secondary',
+      isAcademic: true,
+      category: '主科',
+    };
+  }
+  if (trimmed.includes('英') || trimmed.includes('语') || trimmed.includes('译') || trimmed.includes('日') || trimmed.includes('俄') || trimmed.includes('德') || trimmed.includes('法')) {
+    return {
+      label: trimmed,
+      icon: 'translate',
+      iconColorClass: 'text-tertiary',
+      badgeClass: 'bg-tertiary-fixed/40 text-tertiary',
+      isAcademic: true,
+      category: '主科',
+    };
+  }
+  if (trimmed.includes('物') || trimmed.includes('力') || trimmed.includes('电') || trimmed.includes('光')) {
+    return {
+      label: trimmed,
+      icon: 'electric_bolt',
+      iconColorClass: 'text-[#5B82A6]',
+      badgeClass: 'bg-[#EDF4F8] text-[#5B82A6]',
+      isAcademic: true,
+      category: '理科',
+    };
+  }
+  if (trimmed.includes('化') || trimmed.includes('剂') || trimmed.includes('试')) {
+    return {
+      label: trimmed,
+      icon: 'science',
+      iconColorClass: 'text-[#8C7AA9]',
+      badgeClass: 'bg-[#F4F1F8] text-[#8C7AA9]',
+      isAcademic: true,
+      category: '理科',
+    };
+  }
+  if (trimmed.includes('生') || trimmed.includes('物') || trimmed.includes('医') || trimmed.includes('植')) {
+    return {
+      label: trimmed,
+      icon: 'biotech',
+      iconColorClass: 'text-[#527D3B]',
+      badgeClass: 'bg-[#EEF6E8] text-[#527D3B]',
+      isAcademic: true,
+      category: '理科',
+    };
+  }
+  if (trimmed.includes('科') && !trimmed.includes('信')) {
+    return {
+      label: trimmed,
+      icon: 'experiment',
+      iconColorClass: 'text-[#3E6B99]',
+      badgeClass: 'bg-[#EBF3FA] text-[#3E6B99]',
+      isAcademic: true,
+      category: '理科',
+    };
+  }
+  if (trimmed.includes('史') || trimmed.includes('古')) {
+    return {
+      label: trimmed,
+      icon: 'history_edu',
+      iconColorClass: 'text-[#B87D5B]',
+      badgeClass: 'bg-[#FDF4E3] text-[#B87D5B]',
+      isAcademic: true,
+      category: '文科',
+    };
+  }
+  if (trimmed.includes('地') || trimmed.includes('图') || trimmed.includes('海') || trimmed.includes('空')) {
+    return {
+      label: trimmed,
+      icon: 'public',
+      iconColorClass: 'text-[#3B7A67]',
+      badgeClass: 'bg-[#EAF5F1] text-[#3B7A67]',
+      isAcademic: true,
+      category: '文科',
+    };
+  }
+  if (trimmed.includes('法') || trimmed.includes('政') || trimmed.includes('德') || trimmed.includes('思')) {
+    return {
+      label: trimmed,
+      icon: 'gavel',
+      iconColorClass: 'text-[#B4544D]',
+      badgeClass: 'bg-[#FDECEB] text-[#B4544D]',
+      isAcademic: true,
+      category: '文科',
+    };
+  }
+  if (trimmed.includes('信') || trimmed.includes('编') || trimmed.includes('计') || trimmed.includes('码') || trimmed.includes('程')) {
+    return {
+      label: trimmed,
+      icon: 'terminal',
+      iconColorClass: 'text-[#556299]',
+      badgeClass: 'bg-[#EEF0F8] text-[#556299]',
+      isAcademic: true,
+      category: '技术',
+    };
+  }
+  if (trimmed.includes('技') || trimmed.includes('工') || trimmed.includes('制作')) {
+    return {
+      label: trimmed,
+      icon: 'precision_manufacturing',
+      iconColorClass: 'text-[#546E7A]',
+      badgeClass: 'bg-[#ECEFF1] text-[#546E7A]',
+      isAcademic: true,
+      category: '技术',
+    };
+  }
+  if (trimmed.includes('音') || trimmed.includes('乐') || trimmed.includes('琴') || trimmed.includes('唱') || trimmed.includes('笛')) {
+    return {
+      label: trimmed,
+      icon: 'music_note',
+      iconColorClass: 'text-[#C2185B]',
+      badgeClass: 'bg-[#FCE4EC] text-[#C2185B]',
+      isAcademic: false,
+      category: '艺术',
+    };
+  }
+  if (trimmed.includes('美') || trimmed.includes('画') || trimmed.includes('艺') || trimmed.includes('彩')) {
+    return {
+      label: trimmed,
+      icon: 'palette',
+      iconColorClass: 'text-[#E65100]',
+      badgeClass: 'bg-[#FFF3E0] text-[#E65100]',
+      isAcademic: false,
+      category: '艺术',
+    };
+  }
+  if (trimmed.includes('书') || trimmed.includes('字') || trimmed.includes('帖') || trimmed.includes('墨')) {
+    return {
+      label: trimmed,
+      icon: 'draw',
+      iconColorClass: 'text-[#5D4037]',
+      badgeClass: 'bg-[#EFEBE9] text-[#5D4037]',
+      isAcademic: false,
+      category: '艺术',
+    };
+  }
+  if (trimmed.includes('体') || trimmed.includes('跑') || trimmed.includes('跳') || trimmed.includes('球') || trimmed.includes('泳') || trimmed.includes('锻炼')) {
+    return {
+      label: trimmed,
+      icon: 'directions_run',
+      iconColorClass: 'text-secondary',
+      badgeClass: 'bg-secondary-container/70 text-on-secondary-container',
+      isAcademic: true,
+      category: '体健',
+    };
+  }
+  if (trimmed.includes('心') || trimmed.includes('情') || trimmed.includes('心理')) {
+    return {
+      label: trimmed,
+      icon: 'psychology',
+      iconColorClass: 'text-[#7B1FA2]',
+      badgeClass: 'bg-[#F3E5F5] text-[#7B1FA2]',
+      isAcademic: false,
+      category: '体健',
+    };
+  }
+  if (trimmed.includes('劳') || trimmed.includes('农') || trimmed.includes('作')) {
+    return {
+      label: trimmed,
+      icon: 'handyman',
+      iconColorClass: 'text-[#33691E]',
+      badgeClass: 'bg-[#F1F8E9] text-[#33691E]',
+      isAcademic: false,
+      category: '实践',
+    };
+  }
+  if (trimmed.includes('机') || trimmed.includes('创') || trimmed.includes('智') || trimmed.includes('AI') || trimmed.includes('航模')) {
+    return {
+      label: trimmed,
+      icon: 'smart_toy',
+      iconColorClass: 'text-[#0277BD]',
+      badgeClass: 'bg-[#E1F5FE] text-[#0277BD]',
+      isAcademic: false,
+      category: '实践',
+    };
+  }
+  if (trimmed.includes('棋') || trimmed.includes('牌')) {
+    return {
+      label: trimmed,
+      icon: 'grid_view',
+      iconColorClass: 'text-[#5D4037]',
+      badgeClass: 'bg-[#EFEBE9] text-[#5D4037]',
+      isAcademic: false,
+      category: '兴趣',
+    };
+  }
+
+  // 终极优雅兜底 (基于文字哈希分配不同轻柔色彩与通用学识图标)
+  let hash = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    hash = (hash << 5) - hash + trimmed.charCodeAt(i);
+  }
+  const colorSchemes = [
+    { badge: 'bg-[#FDF4E3] text-[#B87D5B]', iconCol: 'text-[#B87D5B]', icon: 'school' },
+    { badge: 'bg-[#EDF4F8] text-[#5B82A6]', iconCol: 'text-[#5B82A6]', icon: 'auto_stories' },
+    { badge: 'bg-[#F4F1F8] text-[#8C7AA9]', iconCol: 'text-[#8C7AA9]', icon: 'menu_book' },
+    { badge: 'bg-[#EAF5F1] text-[#3B7A67]', iconCol: 'text-[#3B7A67]', icon: 'menu_book' },
+  ];
+  const selected = colorSchemes[Math.abs(hash) % colorSchemes.length];
+
+  return {
+    label: trimmed,
+    icon: selected.icon,
+    iconColorClass: selected.iconCol,
+    badgeClass: selected.badge,
+    isAcademic: true,
+    category: '主科',
+  };
+}
+
+export const SUBJECT_BADGE_MAP: Record<SubjectName, string> = new Proxy(
+  {},
+  {
+    get: (_, prop: string) => getSubjectMeta(prop).badgeClass,
+  }
+);
 
 export const DEFAULT_SUBJECTS: SubjectName[] = [
   '数学',
@@ -35,33 +673,36 @@ export const DEFAULT_SUBJECTS: SubjectName[] = [
   '英语',
   '物理',
   '化学',
+  '生物',
   '历史',
   '道法',
   '地理',
-  '生物',
+  '信息科技',
   '体育锻炼',
   '课余兴趣',
   '自主自习',
 ];
 
 export const RECOMMENDED_EXTRA_SUBJECTS: SubjectName[] = [
-  '道法',
-  '地理',
-  '生物',
   '科学',
   '信息科技',
+  '通用技术',
   '政治',
-  '奥数',
+  '思想政治',
   '音乐',
   '美术',
+  '书法',
+  '心理健康',
+  '劳动教育',
+  '综合实践',
+  '奥数',
   '科创',
+  '日语',
+  '俄语',
 ];
 
 export function getSubjectBadgeClass(subject: SubjectName): string {
-  return (
-    SUBJECT_BADGE_MAP[subject] ||
-    'bg-primary-fixed/40 text-on-primary-fixed-variant'
-  );
+  return getSubjectMeta(subject).badgeClass;
 }
 
 export function getAttendanceStatusMeta(
