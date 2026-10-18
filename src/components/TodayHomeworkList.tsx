@@ -17,6 +17,10 @@ interface TodayHomeworkListProps {
   onSelectDuration: (id: string, minutes: number) => void;
   onUpdateTask?: (updated: HomeworkTask) => void;
   onDeleteTask?: (id: string) => void;
+  onClearAllTasks?: () => void;
+  onRestoreDefaultTasks?: () => void;
+  onOpenVoiceModal?: () => void;
+  onOpenQuickAdd?: () => void;
   onPomodoroComplete: (id: string) => void;
   onShowToast?: (msg: string) => void;
 }
@@ -64,6 +68,10 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   onSelectDuration,
   onUpdateTask,
   onDeleteTask,
+  onClearAllTasks,
+  onRestoreDefaultTasks,
+  onOpenVoiceModal,
+  onOpenQuickAdd,
   onPomodoroComplete,
   onShowToast,
 }) => {
@@ -222,11 +230,82 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
               {summary.totalCount} 项任务 · 预计 {summary.totalMinutes} 分钟
             </span>
           </div>
+          {onClearAllTasks && tasks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '确定清空当前书桌上的模拟/全部任务吗？清空后您可以录入属于您自己的真实作业。'
+                  )
+                ) {
+                  onClearAllTasks();
+                }
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-outline hover:text-error bg-surface-container-low hover:bg-error-container/20 border border-outline-variant/40 transition-colors cursor-pointer"
+              title="一键清空模拟任务，设置自己的任务"
+            >
+              <span className="material-symbols-outlined text-[13px]">
+                delete_sweep
+              </span>
+              <span>清空任务</span>
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="space-y-3">
-        {tasks.map((task) => {
+      {tasks.length === 0 ? (
+        <div className="p-8 rounded-3xl bg-surface-container-lowest/90 backdrop-blur-md border border-dashed border-[#EAE4DA] text-center space-y-4 animate-fade-slide">
+          <div className="w-14 h-14 mx-auto rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center">
+            <span className="material-symbols-outlined text-[28px]">
+              task_alt
+            </span>
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-on-surface">
+              书桌清爽无余粮，准备开启新征程 ✨
+            </h3>
+            <p className="text-xs text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+              当前暂无待完成作业。您可以点击下方【按住说句话】语音口述作业，或点击【+3秒快记】快速添加，打造专属于您的自律学习清单！
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2.5 flex-wrap pt-1">
+            {onOpenVoiceModal && (
+              <button
+                type="button"
+                onClick={onOpenVoiceModal}
+                className="px-4 py-2 rounded-full bg-primary text-on-primary text-xs font-semibold shadow-sm hover:bg-primary-container cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px]">mic</span>
+                <span>按住说句话建单</span>
+              </button>
+            )}
+            {onOpenQuickAdd && (
+              <button
+                type="button"
+                onClick={onOpenQuickAdd}
+                className="px-4 py-2 rounded-full bg-surface-container text-on-surface text-xs font-semibold hover:bg-surface-container-high cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px]">edit</span>
+                <span>+3秒快记</span>
+              </button>
+            )}
+            {onRestoreDefaultTasks && (
+              <button
+                type="button"
+                onClick={onRestoreDefaultTasks}
+                className="px-3.5 py-2 rounded-full text-xs text-on-surface-variant hover:text-on-surface bg-transparent hover:bg-surface-container cursor-pointer flex items-center gap-1 transition-all"
+                title="重新载入示范任务体验功能"
+              >
+                <span className="material-symbols-outlined text-[15px]">refresh</span>
+                <span>载入示范任务</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tasks.map((task) => {
           const isPeTask = task.subject === '体育锻炼';
           const isHobbyTask = task.subject === '课余兴趣';
           const isAcademicHomework = !isPeTask && !isHobbyTask;
@@ -275,6 +354,26 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                     </span>
                     <span>{isEditingTask ? '收起' : '修改'}</span>
                   </button>
+                  {onDeleteTask && (
+                    <>
+                      <span className="text-outline/50 text-xs">·</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`确定删除任务「${task.title}」吗？`)) {
+                            onDeleteTask(task.id);
+                          }
+                        }}
+                        className="text-xs text-outline hover:text-error font-medium inline-flex items-center gap-0.5 cursor-pointer transition-colors shrink-0"
+                        title="删除该任务"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">
+                          delete_outline
+                        </span>
+                        <span>删除</span>
+                      </button>
+                    </>
+                  )}
                   {(task.completedPomodoros ?? 0) > 0 && (
                     <span
                       data-testid={`pomodoro-count-${task.id}`}
@@ -665,6 +764,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
           );
         })}
       </div>
+      )}
     </section>
   );
 };

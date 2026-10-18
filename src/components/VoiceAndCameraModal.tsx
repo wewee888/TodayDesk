@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ParsedVoiceTask } from '../types/study';
 import { parseVoiceCommandLocal } from '../utils/studyLogic';
 
@@ -15,9 +15,9 @@ interface VoiceAndCameraModalProps {
 }
 
 const VOICE_PRESETS = [
-  '今天数学写了一张卷子花了一个小时，物理预习了第三章20分钟',
-  '晚上跳绳20分钟，1000米耐力跑25分钟，英语背诵15分钟',
-  '周末练了象棋45分钟，练了钢琴一个半小时，练了小号30分钟',
+  '初二数学卷子写40分钟，背英语Unit3单词15分钟，晚上跳绳15分钟',
+  '完成物理凸透镜作图精练25分钟，预习化学化合价口诀15分钟',
+  '语文文言文注释背诵20分钟，完成历史课后思考题15分钟',
 ];
 
 export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
@@ -27,30 +27,169 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
   onImportRecognizedScores,
   onShowToast,
 }) => {
-  const [voiceInput, setVoiceInput] = useState(VOICE_PRESETS[0]);
+  const [voiceInput, setVoiceInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
-  const [parsedTasks, setParsedTasks] = useState<ParsedVoiceTask[]>(() =>
-    parseVoiceCommandLocal(VOICE_PRESETS[0])
-  );
+  const [parsedTasks, setParsedTasks] = useState<ParsedVoiceTask[]>([]);
   const [cameraTab, setCameraTab] = useState<'board' | 'score'>('board');
+
+  // Real Microphone (Web Speech API) states
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(true);
+  const [micStatusText, setMicStatusText] = useState<string | null>(null);
+
+  const recognitionRef = useRef<any>(null);
+
+  // Initialize SpeechRecognition on mount / mode change
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setIsSpeechSupported(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setMicStatusText('🎙️ 正在倾听，请清晰说出作业与耗时...');
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setVoiceInput(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setMicStatusText(
+            '⚠️ 麦克风权限未开启。在手机上可直接点击下方文本框，使用手机输入法键盘自带的麦克风说话！'
+          );
+        } else if (event.error === 'no-speech') {
+          setMicStatusText('未检测到声音，请点击麦克风重新说话');
+        } else {
+          setMicStatusText(`识别异常 (${event.error})，可直接键盘或输入法语音打字`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        // If voice input has text, trigger MiniMax AI semantic parsing
+        setVoiceInput((currentText) => {
+          const trimmed = currentText.trim();
+          if (trimmed) {
+            setMicStatusText('✓ 语音输入完毕，正在启动 MiniMax 语义解析...');
+            handleParseVoice(trimmed);
+          }
+          return currentText;
+        });
+      };
+
+      recognitionRef.current = recognition;
+    } catch {
+      setIsSpeechSupported(false);
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [mode]);
 
   if (!mode) return null;
 
+  const startListening = () => {
+    setMicStatusText(null);
+    if (!recognitionRef.current) {
+      setMicStatusText(
+        '📱 提示：当前环境暂不支持网页麦克风直连。请直接在下方文本框使用手机键盘自带的【🎙️麦克风】语音打字，AI 同样支持极速拆解！'
+      );
+      return;
+    }
+
+    try {
+      setVoiceInput('');
+      recognitionRef.current.start();
+    } catch {
+      try {
+        recognitionRef.current.stop();
+        setTimeout(() => {
+          recognitionRef.current?.start();
+        }, 150);
+      } catch {
+        setMicStatusText('无法启动录音，请重试或在下方直接语音打字');
+      }
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    setIsListening(false);
+  };
+
+  const handleToggleRecord = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  // MiniMax LLM semantic recognition call
   const handleParseVoice = async (textToParse: string) => {
-    setVoiceInput(textToParse);
-    const immediate = parseVoiceCommandLocal(textToParse);
+    const trimmed = textToParse.trim();
+    if (!trimmed) {
+      onShowToast('请先输入或说出作业内容');
+      return;
+    }
+
+    setVoiceInput(trimmed);
+    const immediate = parseVoiceCommandLocal(trimmed);
     setParsedTasks(immediate);
     setIsParsing(true);
+
     try {
       const res = await fetch('/api/ai/parse-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToParse }),
+        body: JSON.stringify({ text: trimmed }),
       });
+
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.tasks) && data.tasks.length > 0) {
           setParsedTasks(data.tasks);
+          setMicStatusText(
+            data.source === 'minimax'
+              ? '✨ MiniMax-M3 大模型已成功深度提取科目、题型与耗时'
+              : '✓ 智能引擎已解析任务结构'
+          );
         }
       }
     } catch {
@@ -60,19 +199,25 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
     }
   };
 
+  // Discard a single item before adding to desk
+  const handleRemoveParsedTask = (indexToRemove: number) => {
+    setParsedTasks((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-[#FDFBF7] rounded-t-[28px] sm:rounded-3xl max-w-lg w-full p-5 shadow-2xl border border-[#EAE4DA] space-y-4 animate-[slideUp_0.22s_cubic-bezier(0.16,1,0.3,1)]"
+        className="bg-[#FDFBF7] rounded-t-[28px] sm:rounded-3xl max-w-lg w-full p-5 shadow-2xl border border-[#EAE4DA] space-y-4 animate-[slideUp_0.22s_cubic-bezier(0.16,1,0.3,1)] max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={mode === 'voice' ? '一句话语音智能拆解' : '拍板书或成绩单识别'}
       >
         {mode === 'voice' ? (
           <>
+            {/* Header */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-xs">
@@ -81,11 +226,16 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-on-surface">
-                    一句话语音解析 · 免打字建单
-                  </h3>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-base font-bold text-on-surface">
+                      一句话语音建单
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-primary-fixed/60 text-primary text-[10px] font-bold">
+                      MiniMax-M3 语义模型
+                    </span>
+                  </div>
                   <p className="text-xs text-on-surface-variant">
-                    说出多科作业与耗时，AI 自动拆解为结构化卡片
+                    按住麦克风说话，或用手机输入法语音口述，AI 自动拆解多科任务
                   </p>
                 </div>
               </div>
@@ -101,10 +251,122 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
               </button>
             </div>
 
+            {/* Central Tactile Microphone Button & Real-time Wave Zone */}
+            <div className="p-4 rounded-2xl bg-surface-container-low border border-[#EAE4DA] flex flex-col items-center justify-center text-center space-y-3">
+              <button
+                type="button"
+                onClick={handleToggleRecord}
+                onMouseDown={startListening}
+                onMouseUp={stopListening}
+                onTouchStart={startListening}
+                onTouchEnd={stopListening}
+                className={`relative w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg transition-all active:scale-95 cursor-pointer select-none ${
+                  isListening
+                    ? 'bg-error text-white ring-8 ring-error/25 animate-pulse'
+                    : 'bg-primary hover:bg-primary-container text-on-primary'
+                }`}
+                title={isListening ? '松开或点击停止录音' : '按住说话或点击开启'}
+              >
+                <span className="material-symbols-outlined text-[32px]">
+                  {isListening ? 'graphic_eq' : 'mic'}
+                </span>
+                <span className="text-[10px] font-bold mt-0.5">
+                  {isListening ? '正在录音' : '按住说话'}
+                </span>
+              </button>
+
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-on-surface">
+                  {isListening ? (
+                    <span className="text-error font-bold flex items-center justify-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-error animate-ping" />
+                      正在聆听中... 说完请松开或点击停止
+                    </span>
+                  ) : (
+                    <span>💡 网页麦克风直连 · 支持随时点击或长按口述</span>
+                  )}
+                </div>
+                {micStatusText && (
+                  <p className="text-[11px] text-primary leading-tight max-w-sm px-2">
+                    {micStatusText}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Editable Voice Transcript Box (Mobile Voice Keyboard Friendly) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="voice-transcript-input"
+                  className="text-[11px] font-semibold text-on-surface-variant block"
+                >
+                  口述识别文本（支持手机输入法语音直接打字）：
+                </label>
+                {voiceInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVoiceInput('');
+                      setParsedTasks([]);
+                    }}
+                    className="text-[11px] text-outline hover:text-error cursor-pointer"
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                id="voice-transcript-input"
+                rows={3}
+                value={voiceInput}
+                onChange={(e) => setVoiceInput(e.target.value)}
+                placeholder="例如：初二数学卷子写40分钟，背英语Unit3单词15分钟，晚上跳绳15分钟..."
+                className="w-full bg-white rounded-2xl p-3 text-xs sm:text-sm text-on-surface border border-outline-variant/60 focus:outline-none focus:border-primary shadow-2xs leading-relaxed resize-none"
+              />
+
+              {/* Mobile Typing Hint Banner */}
+              <div className="p-2.5 rounded-xl bg-secondary-container/20 border border-secondary/20 flex items-start gap-2 text-[11px] text-secondary">
+                <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5">
+                  smartphone
+                </span>
+                <p className="leading-snug">
+                  <span className="font-bold">手机端小技巧：</span>点击上方文本框调出手机键盘，直接按键盘自带的【🎙️麦克风】键口述多科作业；说完点击下方【MiniMax AI 智能拆解】即可！
+                </p>
+              </div>
+
+              {/* Action Button: MiniMax Semantic Parsing */}
+              <button
+                type="button"
+                disabled={isParsing || !voiceInput.trim()}
+                onClick={() => handleParseVoice(voiceInput)}
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                  isParsing || !voiceInput.trim()
+                    ? 'bg-surface-container text-outline cursor-not-allowed'
+                    : 'bg-primary text-on-primary hover:bg-primary-container active:scale-98'
+                }`}
+              >
+                {isParsing ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                    <span>MiniMax-M3 语义模型正在分析科目与耗时...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">
+                      auto_awesome
+                    </span>
+                    <span>✨ MiniMax AI 智能语义拆解</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {/* Quick Voice Presets */}
             <div className="space-y-1.5">
               <span className="text-[11px] font-semibold text-on-surface-variant">
-                点击试听常见口述示例：
+                快捷示例（点击快速体验）：
               </span>
               <div className="flex flex-col gap-1.5">
                 {VOICE_PRESETS.map((preset) => (
@@ -120,95 +382,86 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
                   >
                     <span className="truncate">“{preset}”</span>
                     <span className="text-[11px] text-primary shrink-0">
-                      一键识别
+                      一键填入并拆解
                     </span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Editable Voice Transcript Box */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="voice-transcript-input"
-                className="text-[11px] font-semibold text-on-surface-variant block"
-              >
-                语音识别文本（可自由修改补充）：
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="voice-transcript-input"
-                  type="text"
-                  value={voiceInput}
-                  onChange={(e) => {
-                    setVoiceInput(e.target.value);
-                    setParsedTasks(parseVoiceCommandLocal(e.target.value));
-                  }}
-                  placeholder="例如：数学卷子40分钟，英语背诵15分钟"
-                  className="flex-1 bg-white rounded-xl px-3 py-2 text-xs text-on-surface border border-outline-variant/50 focus:outline-none focus:border-primary"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleParseVoice(voiceInput)}
-                  className="px-3 py-2 rounded-xl bg-surface-container text-primary text-xs font-semibold hover:bg-surface-container-high cursor-pointer shrink-0"
-                >
-                  {isParsing ? '解析中...' : 'AI重拆'}
-                </button>
-              </div>
-            </div>
-
-            {/* Structured Breakdown Preview */}
-            <div className="space-y-2 bg-surface-container-low p-3 rounded-2xl border border-surface-container">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-secondary">
-                  ⚡ 自动拆解为 {parsedTasks.length} 条结构化记录：
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {parsedTasks.map((t, idx) => (
-                  <div
-                    key={`${t.subject}-${idx}`}
-                    className="p-2.5 rounded-xl bg-white shadow-2xs flex items-center justify-between gap-2 text-xs"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container text-[11px] font-semibold shrink-0">
-                        {t.category} | {t.subject}
-                      </span>
-                      <span className="font-semibold text-on-surface truncate">
-                        {t.title}
-                      </span>
+            {/* Structured Breakdown Preview (with single-item delete capability) */}
+            {parsedTasks.length > 0 && (
+              <div className="space-y-2 bg-surface-container-low p-3 rounded-2xl border border-surface-container">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-secondary">
+                    ⚡ 自动拆解为 {parsedTasks.length} 项自律作业卡片：
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant">
+                    点击 ✕ 可剔除单项
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {parsedTasks.map((t, idx) => (
+                    <div
+                      key={`${t.subject}-${idx}`}
+                      className="p-2.5 rounded-xl bg-white shadow-2xs flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container text-[11px] font-semibold shrink-0">
+                          {t.category} | {t.subject}
+                        </span>
+                        <span className="font-semibold text-on-surface truncate">
+                          {t.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-bold text-[11px]">
+                          {t.estimatedMinutes}min
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveParsedTask(idx)}
+                          className="w-5 h-5 rounded-full hover:bg-error-container/20 text-outline hover:text-error flex items-center justify-center cursor-pointer"
+                          title="移除此项"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-bold text-[11px]">
-                        {t.estimatedMinutes}min
-                      </span>
-                      <span className="text-[10px] text-outline">
-                        {t.statusNote}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
+            {/* Confirm & Add button */}
             <button
               type="button"
+              disabled={parsedTasks.length === 0}
               onClick={() => {
                 if (parsedTasks.length > 0) {
                   onAddParsedTasks(parsedTasks);
                   onClose();
                 }
               }}
-              className="w-full py-3 rounded-full bg-primary text-on-primary text-sm font-semibold shadow-md hover:bg-primary-container active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              className={`w-full py-3 rounded-full text-sm font-semibold shadow-md transition-all flex items-center justify-center gap-1.5 ${
+                parsedTasks.length > 0
+                  ? 'bg-primary text-on-primary hover:bg-primary-container active:scale-98 cursor-pointer'
+                  : 'bg-surface-container text-outline cursor-not-allowed'
+              }`}
             >
               <span className="material-symbols-outlined text-[18px]">
                 add_task
               </span>
-              <span>确认生成并加入今日书桌 ({parsedTasks.length} 项)</span>
+              <span>
+                {parsedTasks.length > 0
+                  ? `确认生成并加入今日书桌 (${parsedTasks.length} 项)`
+                  : '请先口述作业并拆解'}
+              </span>
             </button>
           </>
         ) : (
           <>
+            {/* Camera Tab (Plate / Scorecard OCR) */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-xs">

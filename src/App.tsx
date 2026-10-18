@@ -288,7 +288,17 @@ export default function App() {
 
   const handleDeleteTask = (id: string) => {
     setHomeworkTasks((prev) => prev.filter((t) => t.id !== id));
-    showToast('已移除该项待办任务');
+    showToast('已删除该待办任务 ✓');
+  };
+
+  const handleClearAllTasks = () => {
+    setHomeworkTasks([]);
+    showToast('已清空书桌任务，现在可以添加您的专属作业啦 ✨');
+  };
+
+  const handleRestoreDefaultTasks = () => {
+    setHomeworkTasks(INITIAL_HOMEWORK_TASKS);
+    showToast('已恢复示范作业清单 ✓');
   };
 
   const handlePomodoroComplete = useCallback(
@@ -465,9 +475,12 @@ export default function App() {
       gradeClass: profile.gradeClass,
     }));
     setShowWelcomeAuthScreen(false);
+    if (isNewRegistration) {
+      setHomeworkTasks([]);
+    }
     showToast(
       isNewRegistration
-        ? `注册成功！欢迎来到「${profile.studentName}」的专属伴学书桌 ✨`
+        ? `注册成功！已为您创建「${profile.studentName}」的全新专属书桌，快来录入第一条作业吧 ✨`
         : `欢迎回来，${profile.studentName}（${
             profile.role === 'parent' ? '家长伴学' : '学生书桌'
           }）✨`
@@ -885,6 +898,10 @@ export default function App() {
                   onSelectDuration={handleSelectDuration}
                   onUpdateTask={handleUpdateTask}
                   onDeleteTask={handleDeleteTask}
+                  onClearAllTasks={handleClearAllTasks}
+                  onRestoreDefaultTasks={handleRestoreDefaultTasks}
+                  onOpenVoiceModal={() => setVoiceOrCameraMode('voice')}
+                  onOpenQuickAdd={() => setIsQuickSheetOpen(true)}
                   onPomodoroComplete={handlePomodoroComplete}
                   onShowToast={showToast}
                 />
