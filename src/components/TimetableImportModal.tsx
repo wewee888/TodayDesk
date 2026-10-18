@@ -4,6 +4,7 @@ import {
   getSubjectBadgeClass,
   parseTimetableContent,
 } from '../utils/studyLogic';
+import { compressImageFile } from '../utils/imageCompressor';
 import { useDragScroll } from '../utils/useDragScroll';
 
 interface TimetableImportModalProps {
@@ -134,29 +135,45 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     onShowToast(`已载入「${presetMeta.label}」并自动识别本学期全部学科 ✨`);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadedFileName(file.name);
 
     if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = String(reader.result || '');
-        setPreviewImageUrl(dataUrl);
+      try {
+        const compressed = await compressImageFile(file, {
+          maxWidthOrHeight: 1920,
+          quality: 0.82,
+          targetMimeType: 'image/webp',
+        });
+        setPreviewImageUrl(compressed.dataUrl);
         runSmartRecognition(
           rawText,
-          file.name,
+          compressed.file.name,
           gradePreset,
-          dataUrl,
-          file.type
+          compressed.dataUrl,
+          'image/webp'
         );
         onShowToast(
-          `📷 已读取课表图片「${file.name}」，成功识别出本学期学科！`
+          `📷 已将课表智能压缩 (${compressed.savedPercent}) 并识别本学期学科！`
         );
-      };
-      reader.readAsDataURL(file);
+      } catch {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '');
+          setPreviewImageUrl(dataUrl);
+          runSmartRecognition(
+            rawText,
+            file.name,
+            gradePreset,
+            dataUrl,
+            file.type
+          );
+        };
+        reader.readAsDataURL(file);
+      }
     } else {
       // Text / CSV / Markdown / JSON timetable file
       const reader = new FileReader();

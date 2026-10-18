@@ -222,4 +222,31 @@ test('getSubjectMeta accurately maps junior and senior high school subjects to d
   assert.equal(customMusic.icon, 'music_note');
 });
 
+test('calculateConstrainedDimensions and formatBytes optimize images accurately for R2 upload', async () => {
+  const { calculateConstrainedDimensions, formatBytes } = await import(
+    './imageCompressor.ts'
+  );
+
+  // Format bytes test
+  assert.equal(formatBytes(0), '0 B');
+  assert.equal(formatBytes(512), '512 B');
+  assert.equal(formatBytes(153600), '150.0 KB');
+  assert.equal(formatBytes(4194304), '4.00 MB');
+
+  // Constrained dimensions test (aspect ratio preserved under max 1920)
+  // 1. Smaller image remains unchanged
+  const small = calculateConstrainedDimensions(800, 600, 1920);
+  assert.deepEqual(small, { width: 800, height: 600 });
+
+  // 2. High-res mobile photo (4032 x 3024) scaled down proportionally
+  const photo = calculateConstrainedDimensions(4032, 3024, 1920);
+  assert.equal(photo.width, 1920);
+  assert.equal(photo.height, 1440);
+
+  // 3. Tall mobile document/scorecard (3024 x 4032) scaled down proportionally
+  const tallPhoto = calculateConstrainedDimensions(3024, 4032, 1920);
+  assert.equal(tallPhoto.width, 1440);
+  assert.equal(tallPhoto.height, 1920);
+});
+
 

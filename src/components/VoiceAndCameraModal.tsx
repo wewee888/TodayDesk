@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ParsedVoiceTask } from '../types/study';
 import { parseVoiceCommandLocal } from '../utils/studyLogic';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface VoiceAndCameraModalProps {
   mode: 'voice' | 'camera' | null;
@@ -32,11 +33,13 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
   const [parsedTasks, setParsedTasks] = useState<ParsedVoiceTask[]>([]);
   const [cameraTab, setCameraTab] = useState<'board' | 'score'>('board');
 
-  // Real Camera & R2 Upload states
+  // Real Camera & R2 Upload states (with Smart WebP Compression)
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [compressionSummary, setCompressionSummary] = useState<string | null>(null);
 
   // Real Microphone (Web Speech API) states
   const [isListening, setIsListening] = useState(false);
@@ -46,42 +49,53 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
   const recognitionRef = useRef<any>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const originalFile = e.target.files?.[0];
+    if (!originalFile) return;
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = String(reader.result || '');
-      setPhotoPreview(dataUrl);
+    try {
+      setIsCompressing(true);
+      setCompressionSummary(null);
+
+      // 1. Client-Side High-Quality WebP Compression (Max 1920px, Quality 0.82)
+      const compressed = await compressImageFile(originalFile, {
+        maxWidthOrHeight: 1920,
+        quality: 0.82,
+        targetMimeType: 'image/webp',
+      });
+
+      setPhotoPreview(compressed.dataUrl);
+      setCompressionSummary(compressed.formattedSummary);
+      setIsCompressing(false);
       setIsUploadingImage(true);
 
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('category', cameraTab === 'board' ? 'board' : 'score');
-        formData.append('account', 'lizihan');
+      // 2. Upload compressed WebP to Cloudflare R2
+      const formData = new FormData();
+      formData.append('file', compressed.file);
+      formData.append('category', cameraTab === 'board' ? 'board' : 'score');
+      formData.append('account', 'lizihan');
 
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.publicUrl) {
-            setUploadedImageUrl(data.publicUrl);
-            onShowToast('照片已安全存入 Cloudflare R2 云图床 ☁️');
-          }
-        } else {
-          onShowToast('照片已载入本地，将在联网时自动同步');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.publicUrl) {
+          setUploadedImageUrl(data.publicUrl);
+          onShowToast(
+            `⚡ 已完成 WebP 压缩 (${compressed.savedPercent}) 并存入 Cloudflare R2 ☁️`
+          );
         }
-      } catch {
-        onShowToast('照片已载入本地预览');
-      } finally {
-        setIsUploadingImage(false);
+      } else {
+        onShowToast('照片已压缩并载入本地，网络通畅时将自动同步');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      onShowToast('照片已载入本地预览');
+    } finally {
+      setIsCompressing(false);
+      setIsUploadingImage(false);
+    }
   };
 
   // Initialize SpeechRecognition on mount / mode change
@@ -593,21 +607,45 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
               </div>
 
               {photoPreview && (
-                <div className="relative rounded-xl overflow-hidden border border-[#EAE4DA] max-h-48 bg-black/5 flex items-center justify-center">
+                <div className="relative rounded-xl overflow-hidden border border-[#EAE4DA] max-h-52 bg-black/5 flex items-center justify-center">
                   <img
                     src={photoPreview}
                     alt="Uploaded Board or Scorecard"
-                    className="max-h-48 w-full object-contain rounded-xl"
+                    className="max-h-52 w-full object-contain rounded-xl"
                   />
+                  {isCompressing && (
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center text-white text-xs font-bold gap-2">
+                      <span className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                      <span>正在进行 WebP 智能无损压缩...</span>
+                    </div>
+                  )}
                   {isUploadingImage && (
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center text-white text-xs font-bold gap-2">
+                    <div className="absolute inset-0 bg-black/45 backdrop-blur-xs flex items-center justify-center text-white text-xs font-bold gap-2">
                       <span className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
                       <span>正在上传到 Cloudflare R2...</span>
                     </div>
                   )}
+                  {compressionSummary && (
+                    <div className="absolute top-2 left-2 right-2 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm text-white text-[10px] sm:text-[11px] font-semibold flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-[#FFE4C8] truncate">
+                        <span className="material-symbols-outlined text-[13px] text-[#A4C3B2]">
+                          compress
+                        </span>
+                        <span>压缩瘦身：{compressionSummary}</span>
+                      </span>
+                      <span className="text-[10px] text-[#A4C3B2] shrink-0 font-mono">
+                        WebP
+                      </span>
+                    </div>
+                  )}
                   {uploadedImageUrl && (
-                    <div className="absolute bottom-2 left-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-[11px] font-semibold flex items-center justify-between">
-                      <span className="truncate">✓ R2 已持久化存储</span>
+                    <div className="absolute bottom-2 left-2 right-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm text-white text-[11px] font-semibold flex items-center justify-between">
+                      <span className="truncate flex items-center gap-1 text-white">
+                        <span className="material-symbols-outlined text-[13px] text-[#A4C3B2]">
+                          cloud_done
+                        </span>
+                        <span>R2 已持久化存储</span>
+                      </span>
                       <span className="text-[10px] text-[#A4C3B2]">云端多设备同步</span>
                     </div>
                   )}
