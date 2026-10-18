@@ -48,6 +48,7 @@ const STORAGE_KEY_DESK_SETTINGS = 'todaydesk_desk_settings_v1';
 const STORAGE_KEY_ACTIVE_USER = 'todaydesk_active_user_v1';
 const STORAGE_KEY_HOMEWORK_TASKS = 'todaydesk_homework_tasks_v1';
 const STORAGE_KEY_ACCOUNTS = 'warm_desk_registered_accounts_v1';
+const STORAGE_KEY_LOGGED_IN = 'todaydesk_logged_in_v1';
 
 export default function App() {
   // Welcome Login / Registration screen state (supports ?autostart=1 or persisted active user)
@@ -67,9 +68,31 @@ export default function App() {
         const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.studentName && parsed.gradeClass) {
+          if (parsed && (parsed.studentName || parsed.gradeClass)) {
             return parsed;
           }
+        }
+        // If logged in marker exists or custom desk settings exist, automatically restore session
+        const isLoggedIn = localStorage.getItem(STORAGE_KEY_LOGGED_IN) === 'true';
+        const rawSettings = localStorage.getItem(STORAGE_KEY_DESK_SETTINGS);
+        if (isLoggedIn || rawSettings) {
+          let studentName = INITIAL_DESK_SETTINGS.studentName;
+          let gradeClass = INITIAL_DESK_SETTINGS.gradeClass;
+          if (rawSettings) {
+            const parsedSettings = JSON.parse(rawSettings);
+            if (parsedSettings?.studentName) studentName = parsedSettings.studentName;
+            if (parsedSettings?.gradeClass) gradeClass = parsedSettings.gradeClass;
+          }
+          const restored: UserAccountProfile = {
+            account: 'lizihan',
+            studentName,
+            gradeClass,
+            role: 'student',
+            targetGoal: '稳步攻克数理压轴题 · 坚持每晚15分钟中考体育打卡',
+          };
+          localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(restored));
+          localStorage.setItem(STORAGE_KEY_LOGGED_IN, 'true');
+          return restored;
         }
       } catch {}
       return null;
@@ -82,10 +105,21 @@ export default function App() {
         return false;
       }
       try {
-        const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.studentName) {
+        const isLoggedIn = localStorage.getItem(STORAGE_KEY_LOGGED_IN);
+        if (isLoggedIn === 'true') {
+          return false;
+        }
+        const rawUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+        if (rawUser) {
+          const parsed = JSON.parse(rawUser);
+          if (parsed && (parsed.studentName || parsed.account)) {
+            return false;
+          }
+        }
+        const rawSettings = localStorage.getItem(STORAGE_KEY_DESK_SETTINGS);
+        if (rawSettings) {
+          const parsedSettings = JSON.parse(rawSettings);
+          if (parsedSettings && (parsedSettings.studentName || parsedSettings.gradeClass)) {
             return false;
           }
         }
@@ -320,6 +354,7 @@ export default function App() {
         STORAGE_KEY_DESK_SETTINGS,
         JSON.stringify(nextSettings)
       );
+      localStorage.setItem(STORAGE_KEY_LOGGED_IN, 'true');
     } catch {}
 
     // Synchronize to current active user profile and registered accounts database
@@ -584,6 +619,7 @@ export default function App() {
   ) => {
     setCurrentUserProfile(profile);
     try {
+      localStorage.setItem(STORAGE_KEY_LOGGED_IN, 'true');
       localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(profile));
     } catch {}
 
@@ -894,6 +930,7 @@ export default function App() {
               aria-label="切换账号或打开登录注册欢迎页"
               onClick={() => {
                 try {
+                  localStorage.removeItem(STORAGE_KEY_LOGGED_IN);
                   localStorage.removeItem(STORAGE_KEY_ACTIVE_USER);
                 } catch {}
                 setShowWelcomeAuthScreen(true);
@@ -930,7 +967,7 @@ export default function App() {
       )}
 
       {/* Main Content Container */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-5 pt-4 pb-36">
+      <main className="flex-1 w-full max-w-6xl mx-auto px-5 pt-4 pb-48 lg:pb-24">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Primary Column (7 cols on Desktop, Full width on Mobile) */}
           <div className="lg:col-span-7 flex flex-col space-y-4">
@@ -1137,7 +1174,7 @@ export default function App() {
 
       {/* Floating Action Dock (全能悬浮岛 - 今日书桌专属) */}
       {activeView === 'desk' && (
-        <div className="fixed bottom-16 lg:bottom-4 left-0 right-0 px-2 sm:px-5 z-30 pointer-events-none">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-5 left-0 right-0 px-2 sm:px-5 z-40 pointer-events-none">
           <div className="max-w-md w-full mx-auto pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-xl rounded-full p-1 shadow-[0_8px_28px_rgba(42,24,0,0.14)] border border-[#EAE4DA] grid grid-cols-[1fr_1.12fr_1fr] items-center gap-1 overflow-hidden">
             {/* Left Button: + 3秒快记 */}
             <button
@@ -1181,9 +1218,10 @@ export default function App() {
       {/* Bottom Tab Navigation Bar */}
       <nav
         aria-label="底部功能切换"
-        className="fixed bottom-0 left-0 right-0 w-full z-30 pb-safe pointer-events-none lg:hidden"
+        className="fixed bottom-0 left-0 right-0 w-full z-30 pointer-events-none lg:hidden"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="max-w-md w-full mx-auto px-2 sm:px-5 pb-2 pt-1">
+        <div className="max-w-md w-full mx-auto px-2 sm:px-5 pb-1.5 pt-1">
           <div className="pointer-events-auto h-12 bg-surface-container-lowest/95 backdrop-blur-xl rounded-full p-1 grid grid-cols-4 items-center gap-0.5 sm:gap-1 shadow-[0_8px_24px_-4px_rgba(115,95,78,0.12)] border border-[#EAE4DA]/80 overflow-hidden">
             <button
               type="button"
@@ -1200,7 +1238,7 @@ export default function App() {
               <span className="material-symbols-outlined text-[14px] sm:text-[17px] shrink-0">
                 today
               </span>
-              <span>Today</span>
+              <span>今日</span>
             </button>
 
             <button
@@ -1218,7 +1256,7 @@ export default function App() {
               <span className="material-symbols-outlined text-[14px] sm:text-[17px] shrink-0">
                 edit_note
               </span>
-              <span>Tasks</span>
+              <span>+快记</span>
             </button>
 
             <button
@@ -1236,7 +1274,7 @@ export default function App() {
               <span className="material-symbols-outlined text-[14px] sm:text-[17px] shrink-0">
                 menu_book
               </span>
-              <span>Archive</span>
+              <span>档案</span>
             </button>
 
             <button
@@ -1254,7 +1292,7 @@ export default function App() {
               <span className="material-symbols-outlined text-[14px] sm:text-[17px] shrink-0">
                 tune
               </span>
-              <span>Desk</span>
+              <span>设置</span>
             </button>
           </div>
         </div>

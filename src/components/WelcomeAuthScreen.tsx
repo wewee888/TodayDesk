@@ -19,6 +19,23 @@ interface StoredAccount extends UserAccountProfile {
 }
 
 const STORAGE_ACCOUNTS_KEY = 'warm_desk_registered_accounts_v1';
+const STORAGE_KEY_DESK_SETTINGS = 'todaydesk_desk_settings_v1';
+
+function getActivePresetInfo(): { studentName: string; gradeClass: string } {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_DESK_SETTINGS) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.studentName || parsed?.gradeClass) {
+        return {
+          studentName: parsed.studentName || '李子涵',
+          gradeClass: parsed.gradeClass || '初二 (3) 班',
+        };
+      }
+    }
+  } catch {}
+  return { studentName: '李子涵', gradeClass: '初二 (3) 班' };
+}
 
 const DEFAULT_DEMO_ACCOUNTS: StoredAccount[] = [
   {
@@ -50,17 +67,37 @@ const GRADE_PRESETS = [
 ];
 
 function loadStoredAccounts(): StoredAccount[] {
+  const preset = getActivePresetInfo();
   try {
-    const raw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
-    if (!raw) return DEFAULT_DEMO_ACCOUNTS;
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACCOUNTS_KEY) : null;
+    if (!raw) {
+      return DEFAULT_DEMO_ACCOUNTS.map((a) => ({
+        ...a,
+        studentName: preset.studentName,
+        gradeClass: preset.gradeClass,
+      }));
+    }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      return parsed.map((a: StoredAccount) => {
+        if (a.account === 'lizihan' || a.account === 'parent_li') {
+          return {
+            ...a,
+            studentName: preset.studentName,
+            gradeClass: preset.gradeClass,
+          };
+        }
+        return a;
+      });
     }
   } catch {
     // ignore storage errors
   }
-  return DEFAULT_DEMO_ACCOUNTS;
+  return DEFAULT_DEMO_ACCOUNTS.map((a) => ({
+    ...a,
+    studentName: preset.studentName,
+    gradeClass: preset.gradeClass,
+  }));
 }
 
 function saveStoredAccounts(accounts: StoredAccount[]) {
@@ -76,6 +113,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   currentProfile,
   onCancelSwitch,
 }) => {
+  const [activePreset] = useState(getActivePresetInfo);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [role, setRole] = useState<'student' | 'parent'>('student');
 
@@ -89,7 +127,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regStudentName, setRegStudentName] = useState('');
-  const [regGradeClass, setRegGradeClass] = useState('初二 (3) 班');
+  const [regGradeClass, setRegGradeClass] = useState(activePreset.gradeClass);
   const [regTargetGoal, setRegTargetGoal] = useState(
     '今日事今日毕 · 错题周末清零'
   );
@@ -215,13 +253,17 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
   const handleQuickDemoEnter = (selectedRole: 'student' | 'parent') => {
     setErrorMessage(null);
+    const preset = getActivePresetInfo();
     onAuthenticated(
       {
         account: selectedRole === 'student' ? 'lizihan' : 'parent_li',
-        studentName: '李子涵',
-        gradeClass: '初二 (3) 班',
+        studentName: preset.studentName,
+        gradeClass: preset.gradeClass,
         role: selectedRole,
-        targetGoal: '稳步攻克数理压轴题 · 坚持每晚15分钟中考体育打卡',
+        targetGoal:
+          selectedRole === 'student'
+            ? '稳步攻克数理压轴题 · 坚持每晚15分钟中考体育打卡'
+            : '静默伴学不焦虑 · 周末错题清账与学情复盘',
       },
       false
     );
@@ -390,7 +432,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                     免输入快速体验通道：
                   </span>
                   <span className="text-on-surface-variant">
-                    直接以预置的「李子涵 · 初二(3)班」完整数据进入书桌
+                    直接以「{activePreset.studentName} · {activePreset.gradeClass}」数据快速进入书桌
                   </span>
                 </div>
               </div>
