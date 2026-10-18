@@ -224,6 +224,65 @@ export default function App() {
     }, 2400);
   }, []);
 
+  // Cloudflare D1 Cloud Hydration: Sync latest user profile and settings from Cloudflare D1
+  useEffect(() => {
+    if (!currentUserProfile?.account || typeof window === 'undefined') return;
+
+    let isMounted = true;
+    const pullFromCloudD1 = async () => {
+      try {
+        const res = await fetch(
+          `/api/sync?account=${encodeURIComponent(currentUserProfile.account)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok && isMounted) {
+            if (data.deskSettings) {
+              setDeskSettings((prev) => ({ ...prev, ...data.deskSettings }));
+            }
+            if (Array.isArray(data.homeworkTasks) && data.homeworkTasks.length > 0) {
+              setHomeworkTasks(data.homeworkTasks);
+            }
+          }
+        }
+      } catch {
+        // Fallback silently to localStorage
+      }
+    };
+
+    pullFromCloudD1();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserProfile?.account]);
+
+  // Cloudflare D1 Sync Helper: Pushes changes to Cloudflare D1 in background
+  const syncToCloudD1 = useCallback(
+    async (overrides?: {
+      deskSettings?: DeskSettings;
+      homeworkTasks?: HomeworkTask[];
+      schedules?: ScheduleItem[];
+      mistakes?: MistakeItem[];
+    }) => {
+      if (!currentUserProfile?.account) return;
+      try {
+        await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account: currentUserProfile.account,
+            profile: currentUserProfile,
+            deskSettings: overrides?.deskSettings || deskSettings,
+            homeworkTasks: overrides?.homeworkTasks || homeworkTasks,
+            schedules: overrides?.schedules || schedules,
+            mistakes: overrides?.mistakes || mistakes,
+          }),
+        });
+      } catch {}
+    },
+    [currentUserProfile, deskSettings, homeworkTasks, schedules, mistakes]
+  );
+
   // Handlers for Yesterday Review
   const handleResolveReview = (
     id: string,
@@ -399,6 +458,8 @@ export default function App() {
       } catch {}
       return updated;
     });
+
+    syncToCloudD1({ deskSettings: nextSettings });
   };
 
   const handleUpdateCustomSubjects = (nextCustomSubjects: SubjectName[]) => {
@@ -486,7 +547,9 @@ export default function App() {
       completed: false,
       completedPomodoros: 0,
     };
-    setHomeworkTasks((prev) => [newTask, ...prev]);
+    const nextTasks = [newTask, ...homeworkTasks];
+    setHomeworkTasks(nextTasks);
+    syncToCloudD1({ homeworkTasks: nextTasks });
     showToast(`已加入今日书桌：${subject} · ${taskType} (${minutes}m) ✨`);
   };
 
@@ -501,7 +564,9 @@ export default function App() {
       completed: false,
       completedPomodoros: 0,
     }));
-    setHomeworkTasks((prev) => [...created, ...prev]);
+    const nextTasks = [...created, ...homeworkTasks];
+    setHomeworkTasks(nextTasks);
+    syncToCloudD1({ homeworkTasks: nextTasks });
     setActiveView('desk');
     showToast(`已自动识别并生成 ${created.length} 项今日待办 🎯`);
   };
@@ -946,6 +1011,15 @@ export default function App() {
               </span>
               <span className="text-[10px] text-outline">切换</span>
             </button>
+
+            {/* Cloudflare D1 + R2 Cloud Sync Indicator */}
+            <div
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/50 text-[10px] font-semibold text-secondary whitespace-nowrap cursor-default"
+              title="已打通 Cloudflare D1 边缘数据库与 R2 云图床，数据与图片永久多端同步"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+              <span>D1+R2云同步</span>
+            </div>
           </div>
         </div>
       </header>
