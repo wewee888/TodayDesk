@@ -139,16 +139,27 @@ export async function onRequestPost(context: any): Promise<Response> {
 
     const statements: any[] = [];
 
-    // Support one-click purge of all mock data for this account
+    // Support one-click purge of ONLY mock/demo data for this account (preserving user-created tasks, schedules and mistakes!)
     if (payload.purgeMockData === true) {
       statements.push(
-        env.DB.prepare('DELETE FROM homework_tasks WHERE account = ?').bind(account)
+        env.DB.prepare(
+          "DELETE FROM homework_tasks WHERE account = ? AND id IN ('task-1', 'task-2', 'task-3', 'task-4')"
+        ).bind(account)
       );
       statements.push(
-        env.DB.prepare('DELETE FROM routine_schedules WHERE account = ?').bind(account)
+        env.DB.prepare(
+          "DELETE FROM routine_schedules WHERE account = ? AND id IN ('sch-1', 'sch-pe', 'sch-2', 'sch-3')"
+        ).bind(account)
       );
       statements.push(
-        env.DB.prepare('DELETE FROM mistakes WHERE account = ?').bind(account)
+        env.DB.prepare(
+          "DELETE FROM mistakes WHERE account = ? AND id IN ('mistake-1', 'mistake-2', 'mistake-3')"
+        ).bind(account)
+      );
+      statements.push(
+        env.DB.prepare(
+          "DELETE FROM exam_scores WHERE account = ? AND (id LIKE 'demo-%' OR id IN ('exam-demo-1', 'exam-demo-2', 'exam-demo-3'))"
+        ).bind(account)
       );
     }
 

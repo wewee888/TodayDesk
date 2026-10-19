@@ -12,6 +12,7 @@ import {
   RECOMMENDED_EXTRA_SUBJECTS,
   clampTaskDuration,
   getAttendanceStatusMeta,
+  getDefaultSubjectsForGrade,
   getScheduleFrequencyBadge,
   getSubjectBadgeClass,
 } from '../utils/studyLogic';
@@ -178,7 +179,10 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   if (!isOpen) return null;
 
   const allAvailableSubjects: SubjectName[] = Array.from(
-    new Set([...DEFAULT_SUBJECTS, ...(settings.customSubjects || [])])
+    new Set([
+      ...getDefaultSubjectsForGrade(settings.gradeClass),
+      ...(settings.customSubjects || []),
+    ])
   );
 
   const getItemConfig = (

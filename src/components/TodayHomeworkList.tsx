@@ -6,12 +6,14 @@ import {
   calculatePomodoroProgress,
   clampTaskDuration,
   formatPomodoroTime,
+  getDefaultSubjectsForGrade,
   getSubjectBadgeClass,
   getSubjectMeta,
 } from '../utils/studyLogic';
 
 interface TodayHomeworkListProps {
   tasks: HomeworkTask[];
+  gradeClass?: string;
   pomodoroMinutes?: number;
   customSubjects?: SubjectName[];
   onToggleTaskComplete: (id: string) => void;
@@ -63,6 +65,7 @@ function playWarmCompletionChime() {
 
 export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   tasks,
+  gradeClass,
   pomodoroMinutes = 25,
   customSubjects = [],
   onToggleTaskComplete,
@@ -93,7 +96,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   const [editMinutes, setEditMinutes] = useState<string>('30');
 
   const availableSubjects = Array.from(
-    new Set([...DEFAULT_SUBJECTS, ...customSubjects])
+    new Set([...getDefaultSubjectsForGrade(gradeClass), ...customSubjects])
   );
 
   useEffect(() => {

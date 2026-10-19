@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ActivityConfigItem, SubjectName } from '../types/study';
 import {
   RECOMMENDED_EXTRA_SUBJECTS,
   buildTaskTitle,
   clampTaskDuration,
+  getDefaultSubjectsForGrade,
   getSubjectMeta,
   getTaskPresetsForSubject,
 } from '../utils/studyLogic';
@@ -18,6 +19,7 @@ interface QuickCapsuleSheetProps {
     minutes: number,
     customTitle?: string
   ) => void;
+  gradeClass?: string;
   customSubjects?: SubjectName[];
   onAddCustomSubject?: (newSubject: SubjectName) => void;
   onUpdateCustomSubjects?: (nextCustomSubjects: SubjectName[]) => void;
@@ -31,36 +33,6 @@ interface QuickCapsuleSheetProps {
   inlineMode?: boolean;
 }
 
-const BASE_SUBJECT_NAMES: SubjectName[] = [
-  '语文',
-  '数学',
-  '英语',
-  '物理',
-  '化学',
-  '生物',
-  '历史',
-  '地理',
-  '道法',
-  '科学',
-  '信息科技',
-  '体育锻炼',
-  '课余兴趣',
-  '自主自习',
-];
-
-const BASE_SUBJECT_OPTIONS: {
-  label: SubjectName;
-  icon: string;
-  iconColorClass: string;
-}[] = BASE_SUBJECT_NAMES.map((name) => {
-  const meta = getSubjectMeta(name);
-  return {
-    label: name,
-    icon: meta.icon,
-    iconColorClass: meta.iconColorClass,
-  };
-});
-
 // PE & Quick duration presets: 5, 10, 15, 20, 25, 30, 45 + 60, 90
 const PE_TIME_PRESETS = [5, 10, 15, 20, 25, 30, 45];
 const GENERAL_TIME_PRESETS = [10, 15, 20, 25, 30, 45, 60, 90];
@@ -69,6 +41,7 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   isOpen,
   onClose,
   onAddTask,
+  gradeClass,
   customSubjects,
   onAddCustomSubject,
   onUpdateCustomSubjects,
@@ -95,14 +68,26 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
     []
   );
 
-  if (!isOpen && !inlineMode) return null;
+  // Dynamically resolve default curriculum based on the student's grade:
+  // 初一 (七年级) -> 语、数、英、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (无物理、无化学)
+  // 初二 (八年级) -> 语、数、英、物理、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (有物理，无化学)
+  // 初三 (九年级) -> 语、数、英、物理、化学、道法、历史、体育锻炼、课余兴趣、自主自习 (有物理、有化学)
+  const baseNames = getDefaultSubjectsForGrade(gradeClass);
+  const baseSubjectOptions = baseNames.map((name) => {
+    const meta = getSubjectMeta(name);
+    return {
+      label: name,
+      icon: meta.icon,
+      iconColorClass: meta.iconColorClass,
+    };
+  });
 
   const combinedCustom = Array.from(
     new Set([...(customSubjects || []), ...localAddedSubjects])
   );
 
   const extraSubjectItems = combinedCustom
-    .filter((s) => !BASE_SUBJECT_OPTIONS.some((b) => b.label === s))
+    .filter((s) => !baseSubjectOptions.some((b) => b.label === s))
     .map((s) => {
       const meta = getSubjectMeta(s);
       return {
@@ -112,7 +97,19 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
       };
     });
 
-  const allSubjectOptions = [...BASE_SUBJECT_OPTIONS, ...extraSubjectItems];
+  const allSubjectOptions = [...baseSubjectOptions, ...extraSubjectItems];
+
+  // Auto-switch selectedSubject if current selection is not part of this grade's curriculum (e.g. was 物理 but switched to 初一)
+  useEffect(() => {
+    if (
+      allSubjectOptions.length > 0 &&
+      !allSubjectOptions.some((o) => o.label === selectedSubject)
+    ) {
+      setSelectedSubject(allSubjectOptions[0].label);
+    }
+  }, [gradeClass, allSubjectOptions, selectedSubject]);
+
+  if (!isOpen && !inlineMode) return null;
 
   const currentPresets = getTaskPresetsForSubject(
     selectedSubject,

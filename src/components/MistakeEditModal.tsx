@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { MistakeItem, SubjectName } from '../types/study';
-import { getSubjectMeta } from '../utils/studyLogic';
+import { getDefaultSubjectsForGrade, getSubjectMeta } from '../utils/studyLogic';
 
 interface MistakeEditModalProps {
   isOpen: boolean;
+  gradeClass?: string;
   initialMistake?: MistakeItem | null;
   customSubjects?: SubjectName[];
   onSave: (mistake: MistakeItem) => void;
@@ -36,6 +37,7 @@ const REASON_PRESETS = [
 
 export const MistakeEditModal: React.FC<MistakeEditModalProps> = ({
   isOpen,
+  gradeClass,
   initialMistake,
   customSubjects = [],
   onSave,
@@ -83,7 +85,12 @@ export const MistakeEditModal: React.FC<MistakeEditModalProps> = ({
 
   if (!isOpen) return null;
 
-  const allSubjects = Array.from(new Set([...COMMON_SUBJECTS, ...customSubjects]));
+  const gradeBaseSubjects = getDefaultSubjectsForGrade(gradeClass).filter(
+    (s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '自主自习'
+  );
+  const allSubjects = Array.from(
+    new Set([...gradeBaseSubjects, ...customSubjects])
+  );
 
   const handleSelectSubject = (s: SubjectName) => {
     setSubject(s);

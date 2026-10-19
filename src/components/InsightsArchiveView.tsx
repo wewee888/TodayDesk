@@ -13,6 +13,7 @@ import { MultiPeriodReportSection } from './MultiPeriodReportSection';
 import {
   type SchoolExamScheduleMode,
   buildSmartExamPeriods,
+  getDefaultSubjectsForGrade,
   getSubjectMeta,
   resolveRecommendedExamPeriod,
 } from '../utils/studyLogic';
@@ -22,6 +23,8 @@ import { MistakeEditModal } from './MistakeEditModal';
 interface InsightsArchiveViewProps {
   tasks?: HomeworkTask[];
   mistakes: MistakeItem[];
+  gradeClass?: string;
+  isDemoPurged?: boolean;
   onClearMistake: (id: string) => void;
   onRestoreMistake: (id: string) => void;
   onDeleteMistake?: (id: string) => void;
@@ -74,6 +77,8 @@ const EXTRA_EXAM_SUBJECTS = [
 export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   tasks = [],
   mistakes,
+  gradeClass,
+  isDemoPurged,
   onClearMistake,
   onRestoreMistake,
   onDeleteMistake,
@@ -89,6 +94,11 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   onOpenWeeklyReport,
   onShowToast,
 }) => {
+  // Academic exam subjects based on the student's grade (e.g. 初一/初二 has no 化学)
+  const gradeExamSubjects = getDefaultSubjectsForGrade(gradeClass).filter(
+    (s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '自主自习'
+  );
+
   const { dragProps: mistakeDragProps, isDragging: isDraggingMistakes } =
     useDragScroll<HTMLDivElement>();
   const { dragProps: periodDragProps, isDragging: isDraggingPeriods } =
@@ -1059,7 +1069,12 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-[10px] text-outline">快添学科：</span>
                 {Array.from(
-                  new Set([...EXTRA_EXAM_SUBJECTS, ...(customSubjects || [])])
+                  new Set([
+                    ...(gradeExamSubjects.length > 0
+                      ? gradeExamSubjects
+                      : EXTRA_EXAM_SUBJECTS),
+                    ...(customSubjects || []),
+                  ])
                 )
                   .filter((s) => !draftCards.some((c) => c.subject === s))
                   .map((subj) => {
@@ -1153,91 +1168,115 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </div>
 
         {/* Score Cards Bento Grid (Click card to edit subject, score & fullScore) */}
-        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-          {examScores.map((card, idx) => {
-            const pct = Math.min(
-              100,
-              Math.round((card.score / Math.max(card.fullScore, 1)) * 100)
-            );
-            const titleColor =
-              card.colorScheme === 'primary'
-                ? 'text-primary'
-                : card.colorScheme === 'secondary'
-                ? 'text-secondary'
-                : 'text-tertiary';
-            const barColor =
-              card.colorScheme === 'primary'
-                ? 'bg-primary-container'
-                : card.colorScheme === 'secondary'
-                ? 'bg-secondary'
-                : 'bg-tertiary-container';
-            const badgeColor =
-              card.colorScheme === 'tertiary'
-                ? 'text-tertiary'
-                : 'text-secondary';
+        {examScores.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-surface-container-lowest border border-dashed border-[#EAE4DA] flex flex-col items-center justify-center text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-secondary-container/60 text-secondary flex items-center justify-center">
+              <span className="material-symbols-outlined text-[24px]">add_chart</span>
+            </div>
+            <div className="space-y-1 max-w-sm">
+              <div className="text-sm font-bold text-on-surface">「{examPeriod}」暂未录入考试成绩</div>
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                示范成绩已清空。点击下方按钮即可录入真实考分与满分，开启专属成长档案。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openFastEntry()}
+              className="px-4 py-2 rounded-full bg-secondary text-on-secondary text-xs font-semibold shadow-xs hover:bg-secondary/90 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">edit_note</span>
+              <span>+ 录入本次考分与学科</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+            {examScores.map((card, idx) => {
+              const pct = Math.min(
+                100,
+                Math.round((card.score / Math.max(card.fullScore, 1)) * 100)
+              );
+              const titleColor =
+                card.colorScheme === 'primary'
+                  ? 'text-primary'
+                  : card.colorScheme === 'secondary'
+                  ? 'text-secondary'
+                  : 'text-tertiary';
+              const barColor =
+                card.colorScheme === 'primary'
+                  ? 'bg-primary-container'
+                  : card.colorScheme === 'secondary'
+                  ? 'bg-secondary'
+                  : 'bg-tertiary-container';
+              const badgeColor =
+                card.colorScheme === 'tertiary'
+                  ? 'text-tertiary'
+                  : 'text-secondary';
 
-            return (
-              <div
-                key={card.id || `${card.subject}-${idx}`}
-                onClick={() => openFastEntry()}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openFastEntry();
-                  }
-                }}
-                title={`点击修改${card.subject}学科名、得分或满分（支持90/100/120/150等）`}
-                className="flex flex-col p-3.5 rounded-2xl bg-surface-container-lowest shadow-sm border border-[#EAE4DA]/75 hover:border-primary/40 card-hover-lift space-y-2.5 cursor-pointer group min-w-0"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span
-                    className={`text-[13px] font-bold tracking-tight truncate inline-flex items-center gap-1 ${titleColor}`}
-                  >
-                    <span className="material-symbols-outlined text-[15px] shrink-0">
-                      {getSubjectMeta(card.subject).icon}
+              return (
+                <div
+                  key={card.id || `${card.subject}-${idx}`}
+                  onClick={() => openFastEntry()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      openFastEntry();
+                    }
+                  }}
+                  title={`点击修改${card.subject}学科名、得分或满分（支持90/100/120/150等）`}
+                  className="flex flex-col p-3.5 rounded-2xl bg-surface-container-lowest shadow-sm border border-[#EAE4DA]/75 hover:border-primary/40 card-hover-lift space-y-2.5 cursor-pointer group min-w-0"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={`text-[13px] font-bold tracking-tight truncate inline-flex items-center gap-1 ${titleColor}`}
+                    >
+                      <span className="material-symbols-outlined text-[15px] shrink-0">
+                        {getSubjectMeta(card.subject).icon}
+                      </span>
+                      <span className="truncate">{card.subject}</span>
                     </span>
-                    <span className="truncate">{card.subject}</span>
-                  </span>
-                  <span className="material-symbols-outlined text-[14px] text-outline group-hover:text-primary transition-colors shrink-0">
-                    edit
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-1 flex-wrap">
-                    <span className="text-[22px] sm:text-[26px] leading-none typo-num-hero text-on-surface">
-                      {card.score}
-                    </span>
-                    <span className="text-[11px] font-medium text-outline underline decoration-dotted underline-offset-2 group-hover:text-primary tabular-nums">
-                      /{card.fullScore}
+                    <span className="material-symbols-outlined text-[14px] text-outline group-hover:text-primary transition-colors shrink-0">
+                      edit
                     </span>
                   </div>
-                  <div
-                    className={`inline-flex items-center ${badgeColor} text-[11px] font-semibold max-w-full`}
-                  >
-                    <span className="material-symbols-outlined text-[13px] mr-0.5 shrink-0">
-                      {card.trendIcon}
-                    </span>
-                    <span className="truncate">{card.trendText}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-1 flex-wrap">
+                      <span className="text-[22px] sm:text-[26px] leading-none typo-num-hero text-on-surface">
+                        {card.score}
+                      </span>
+                      <span className="text-[11px] font-medium text-outline underline decoration-dotted underline-offset-2 group-hover:text-primary tabular-nums">
+                        /{card.fullScore}
+                      </span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center ${badgeColor} text-[11px] font-semibold max-w-full`}
+                    >
+                      <span className="material-symbols-outlined text-[13px] mr-0.5 shrink-0">
+                        {card.trendIcon}
+                      </span>
+                      <span className="truncate">{card.trendText}</span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`${barColor} h-full rounded-full transition-all duration-300`}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                 </div>
-                <div className="w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className={`${barColor} h-full rounded-full transition-all duration-300`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* SECTION 2.5: 作业与成绩 · 周视图 / 月视图 / 季视图 / 年视图 & 综合学情报表 */}
       <MultiPeriodReportSection
         tasks={tasks}
         examScores={examScores}
+        gradeClass={gradeClass}
+        isDemoPurged={isDemoPurged || examScores.length === 0}
         customSubjects={customSubjects}
         onShowToast={onShowToast}
       />
@@ -1262,61 +1301,71 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </div>
 
         {/* Tactile Visual Efficiency Map / Bubbles */}
-        <div className="relative w-full h-44 rounded-2xl bg-surface-container-low p-3 flex flex-col justify-between overflow-hidden">
-          {/* Subtle paper graph guidelines */}
-          <div className="absolute inset-0 flex flex-col justify-between p-3 pointer-events-none opacity-40">
-            <div className="w-full border-t border-dashed border-outline-variant" />
-            <div className="w-full border-t border-dashed border-outline-variant" />
-            <div className="w-full border-t border-dashed border-outline-variant" />
+        {isDemoPurged || examScores.length === 0 ? (
+          <div className="w-full h-44 rounded-2xl bg-surface-container-low p-4 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-[#EAE4DA]">
+            <span className="material-symbols-outlined text-[28px] text-outline">query_stats</span>
+            <div className="text-xs font-bold text-on-surface">学情效能罗盘待生成</div>
+            <p className="text-[11px] text-on-surface-variant max-w-xs">
+              示范数据已彻底清空。录入真实考分并打卡每日作业后，系统将自动汇总各科学时投入与提分效能四象限罗盘。
+            </p>
           </div>
+        ) : (
+          <div className="relative w-full h-44 rounded-2xl bg-surface-container-low p-3 flex flex-col justify-between overflow-hidden">
+            {/* Subtle paper graph guidelines */}
+            <div className="absolute inset-0 flex flex-col justify-between p-3 pointer-events-none opacity-40">
+              <div className="w-full border-t border-dashed border-outline-variant" />
+              <div className="w-full border-t border-dashed border-outline-variant" />
+              <div className="w-full border-t border-dashed border-outline-variant" />
+            </div>
 
-          {INITIAL_EFFICIENCY_BUBBLES.map((b) => {
-            const isSelected = selectedBubble?.id === b.id;
-            const circleClass =
-              b.colorScheme === 'primary'
-                ? 'bg-primary-container text-on-primary'
-                : b.colorScheme === 'tertiary'
-                ? 'bg-tertiary-container text-on-tertiary'
-                : 'bg-secondary text-on-secondary';
-            const tagClass =
-              b.colorScheme === 'primary'
-                ? 'bg-primary-fixed text-on-primary-fixed'
-                : b.colorScheme === 'tertiary'
-                ? 'bg-tertiary-fixed text-on-tertiary-fixed'
-                : 'bg-secondary-fixed text-on-secondary-fixed';
+            {INITIAL_EFFICIENCY_BUBBLES.map((b) => {
+              const isSelected = selectedBubble?.id === b.id;
+              const circleClass =
+                b.colorScheme === 'primary'
+                  ? 'bg-primary-container text-on-primary'
+                  : b.colorScheme === 'tertiary'
+                  ? 'bg-tertiary-container text-on-tertiary'
+                  : 'bg-secondary text-on-secondary';
+              const tagClass =
+                b.colorScheme === 'primary'
+                  ? 'bg-primary-fixed text-on-primary-fixed'
+                  : b.colorScheme === 'tertiary'
+                  ? 'bg-tertiary-fixed text-on-tertiary-fixed'
+                  : 'bg-secondary-fixed text-on-secondary-fixed';
 
-            return (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() =>
-                  setSelectedBubble(isSelected ? null : b)
-                }
-                className={`absolute ${b.positionClass} flex flex-col items-center group cursor-pointer focus:outline-none z-10`}
-              >
-                <div
-                  className={`${b.sizeClass} rounded-full ${circleClass} flex flex-col items-center justify-center shadow-md transform transition-transform group-hover:scale-105 ${
-                    isSelected ? 'ring-3 ring-primary/40 scale-105' : ''
-                  }`}
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedBubble(isSelected ? null : b)
+                  }
+                  className={`absolute ${b.positionClass} flex flex-col items-center group cursor-pointer focus:outline-none z-10`}
                 >
-                  <span className="text-[12px] font-bold">{b.subject}</span>
-                  <span className="text-[11px] opacity-90">{b.hours}h</span>
-                </div>
-                <div
-                  className={`mt-1 px-2 py-0.5 rounded-full ${tagClass} text-[11px] font-semibold shadow-2xs whitespace-nowrap`}
-                >
-                  {b.badgeText}
-                </div>
-              </button>
-            );
-          })}
+                  <div
+                    className={`${b.sizeClass} rounded-full ${circleClass} flex flex-col items-center justify-center shadow-md transform transition-transform group-hover:scale-105 ${
+                      isSelected ? 'ring-3 ring-primary/40 scale-105' : ''
+                    }`}
+                  >
+                    <span className="text-[12px] font-bold">{b.subject}</span>
+                    <span className="text-[11px] opacity-90">{b.hours}h</span>
+                  </div>
+                  <div
+                    className={`mt-1 px-2 py-0.5 rounded-full ${tagClass} text-[11px] font-semibold shadow-2xs whitespace-nowrap`}
+                  >
+                    {b.badgeText}
+                  </div>
+                </button>
+              );
+            })}
 
-          {/* Axes Labels */}
-          <div className="relative z-10 flex justify-between w-full text-[11px] text-on-surface-variant font-medium pointer-events-none mt-auto">
-            <span>← 夯实基础期</span>
-            <span>高回报爆发区 →</span>
+            {/* Axes Labels */}
+            <div className="relative z-10 flex justify-between w-full text-[11px] text-on-surface-variant font-medium pointer-events-none mt-auto">
+              <span>← 夯实基础期</span>
+              <span>高回报爆发区 →</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Selected Bubble Interactive Diagnostic Pill */}
         {selectedBubble && (
@@ -1357,7 +1406,9 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               </span>
             </div>
             <p className="text-[13px] text-on-surface-variant leading-relaxed">
-              “本月数学压轴题突破明显，平时错题回填坚持得非常棒！每晚坚持 20 分钟中考体育跳绳与体能打卡，周末重点把物理受力分析与透镜成像的 2 道错题吃透，象棋、钢琴与小号练习继续保持节奏。”
+              {isDemoPurged || examScores.length === 0
+                ? '“欢迎使用今日书桌成长档案！录入各次小测、月考与期中/期末考分，配合每日作业与体育锻炼打卡，此处将智能提炼家庭学情便签与亲子复盘建议。”'
+                : '“本月数学压轴题突破明显，平时错题回填坚持得非常棒！每晚坚持 20 分钟中考体育跳绳与体能打卡，周末重点把物理受力分析与透镜成像的 2 道错题吃透，象棋、钢琴与小号练习继续保持节奏。”'}
             </p>
           </div>
         </div>
@@ -1707,6 +1758,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
       {/* Edit or Add Mistake Modal */}
       <MistakeEditModal
         isOpen={isAddingMistake || Boolean(editingMistake)}
+        gradeClass={gradeClass}
         initialMistake={editingMistake}
         customSubjects={customSubjects}
         onSave={(saved) => {

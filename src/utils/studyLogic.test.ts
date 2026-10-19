@@ -8,6 +8,7 @@ import {
   clampTaskDuration,
   clearMistakeItem,
   formatPomodoroTime,
+  getDefaultSubjectsForGrade,
   getSubjectMeta,
   getTaskPresetsForSubject,
   parseTimetableContent,
@@ -247,6 +248,27 @@ test('calculateConstrainedDimensions and formatBytes optimize images accurately 
   const tallPhoto = calculateConstrainedDimensions(3024, 4032, 1920);
   assert.equal(tallPhoto.width, 1440);
   assert.equal(tallPhoto.height, 1920);
+});
+
+test('getDefaultSubjectsForGrade accurately adapts default subjects to grade curriculum', () => {
+  // 初一 (七年级)：语、数、英、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (无物理、无化学)
+  const grade7 = getDefaultSubjectsForGrade('初一 (6) 班');
+  assert.ok(!grade7.includes('物理'), '初一绝不默认出现物理');
+  assert.ok(!grade7.includes('化学'), '初一绝不默认出现化学');
+  assert.ok(grade7.includes('语文') && grade7.includes('数学') && grade7.includes('英语'));
+  assert.ok(grade7.includes('地理') && grade7.includes('生物') && grade7.includes('历史') && grade7.includes('道法'));
+
+  // 初二 (八年级)：开物理，无化学 (化学初三开设)
+  const grade8 = getDefaultSubjectsForGrade('初二 (3) 班');
+  assert.ok(grade8.includes('物理'), '初二默认包含物理');
+  assert.ok(!grade8.includes('化学'), '初二绝不默认包含化学');
+  assert.ok(grade8.includes('地理') && grade8.includes('生物'));
+
+  // 初三 (九年级)：开化学，中考冲刺 (地理生物在八年级已结业)
+  const grade9 = getDefaultSubjectsForGrade('初三 (1) 班');
+  assert.ok(grade9.includes('物理'), '初三包含物理');
+  assert.ok(grade9.includes('化学'), '初三包含化学');
+  assert.ok(!grade9.includes('地理') && !grade9.includes('生物'), '初三默认结业地理生物');
 });
 
 

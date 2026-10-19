@@ -51,10 +51,16 @@ const STORAGE_KEY_SCHEDULES = 'todaydesk_schedules_v1';
 const STORAGE_KEY_REVIEW_ITEMS = 'todaydesk_review_items_v1';
 const STORAGE_KEY_REVIEW_DISMISSED = 'todaydesk_review_dismissed_v1';
 const STORAGE_KEY_MISTAKES = 'todaydesk_mistakes_v1';
+const STORAGE_KEY_EXAM_DATA_MAP = 'todaydesk_exam_data_map_v1';
+const STORAGE_KEY_BACKUP_SNAPSHOT = 'todaydesk_backup_snapshot_v1';
 const STORAGE_KEY_DEMO_PURGED = 'todaydesk_demo_data_purged_v1';
 const STORAGE_KEY_LAST_LOGIN_ACCOUNT = 'todaydesk_last_login_account_v1';
 const STORAGE_KEY_ACCOUNTS = 'warm_desk_registered_accounts_v1';
 const STORAGE_KEY_LOGGED_IN = 'todaydesk_logged_in_v1';
+
+const DEMO_TASK_IDS = new Set(['task-1', 'task-2', 'task-3', 'task-4']);
+const DEMO_SCHEDULE_IDS = new Set(['sch-1', 'sch-pe', 'sch-2', 'sch-3']);
+const DEMO_MISTAKE_IDS = new Set(['mistake-1', 'mistake-2', 'mistake-3']);
 
 export default function App() {
   // Welcome Login / Registration screen state (supports ?autostart=1 or persisted active user)
@@ -285,7 +291,39 @@ export default function App() {
 
   const [examPeriod, setExamPeriod] = useState<ExamPeriod>('10月月考');
   const [examDataMap, setExamDataMap] =
-    useState<Record<ExamPeriod, ExamScoreCard[]>>(EXAM_DATA_BY_PERIOD);
+    useState<Record<ExamPeriod, ExamScoreCard[]>>(() => {
+      if (typeof window !== 'undefined') {
+        try {
+          const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+          const raw = localStorage.getItem(STORAGE_KEY_EXAM_DATA_MAP);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+          }
+          if (isPurged) {
+            return {
+              '周考': [],
+              '10月月考': [],
+              '11月月考': [],
+              '期中考试': [],
+              '期末考试': [],
+              '中考模拟': [],
+            };
+          }
+        } catch {}
+      }
+      return EXAM_DATA_BY_PERIOD;
+    });
+
+  // Automatically persist examDataMap whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_EXAM_DATA_MAP,
+        JSON.stringify(examDataMap)
+      );
+    } catch {}
+  }, [examDataMap]);
 
   // Modals: Voice/Camera, Weekly AI Report, Schedule Preset, Notifications
   const [voiceOrCameraMode, setVoiceOrCameraMode] = useState<
@@ -741,36 +779,89 @@ export default function App() {
   const handlePurgeAllMockData = () => {
     if (
       !window.confirm(
-        '确定要一键清空全部示范数据吗？\n\n将一次性清除：\n• 示例作业清单\n• 示例固定习惯日程与打卡（跳远、练琴等）\n• 昨日作业小复盘\n• 示例错题本记录\n\n您的学生姓名、班级和番茄钟等个性化配置将完整保留。'
+        '确定要一键清空全部示范数据吗？\n\n将一次性清除：\n• 示例作业清单（已录入的非示范作业将完整保留）\n• 示例固定习惯日程与打卡（跳远、练琴等）\n• 昨日作业小复盘\n• 示例错题本记录\n• 档案中的示范考试成绩\n\n您的学生姓名、班级、已添加的真实作业和番茄钟等个性化配置将100%安全保留。'
       )
     ) {
       return;
     }
 
-    setHomeworkTasks([]);
-    setSchedules([]);
+    // 1. Save backup snapshot in case user wants to restore
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_BACKUP_SNAPSHOT,
+        JSON.stringify({
+          homeworkTasks,
+          schedules,
+          mistakes,
+          examDataMap,
+          timestamp: Date.now(),
+        })
+      );
+    } catch {}
+
+    // 2. Filter OUT only demo data, preserving all user-created items
+    const remainingTasks = homeworkTasks.filter((t) => !DEMO_TASK_IDS.has(t.id));
+    const remainingSchedules = schedules.filter((s) => !DEMO_SCHEDULE_IDS.has(s.id));
+    const remainingMistakes = mistakes.filter((m) => !DEMO_MISTAKE_IDS.has(m.id));
+
+    // 3. Clear demo exam scores in archive
+    const cleanExamDataMap: Record<ExamPeriod, ExamScoreCard[]> = {
+      '周考': [],
+      '10月月考': [],
+      '11月月考': [],
+      '期中考试': [],
+      '期末考试': [],
+      '中考模拟': [],
+    };
+
+    setHomeworkTasks(remainingTasks);
+    setSchedules(remainingSchedules);
     setReviewItems([]);
     setReviewBannerDismissed(true);
-    setMistakes([]);
+    setMistakes(remainingMistakes);
+    setExamDataMap(cleanExamDataMap);
     setIsDemoPurged(true);
 
     try {
       localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
-      localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify(remainingTasks));
+      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(remainingSchedules));
       localStorage.setItem(STORAGE_KEY_REVIEW_ITEMS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, 'true');
-      localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify(remainingMistakes));
+      localStorage.setItem(STORAGE_KEY_EXAM_DATA_MAP, JSON.stringify(cleanExamDataMap));
     } catch {}
 
     syncToCloudD1({
-      homeworkTasks: [],
-      schedules: [],
-      mistakes: [],
+      homeworkTasks: remainingTasks,
+      schedules: remainingSchedules,
+      mistakes: remainingMistakes,
       purgeMockData: true,
     });
 
-    showToast('已成功清空全部示范数据！欢迎开启专属于你的纯净书桌 ✨');
+    showToast('已清空全部示范数据！您的真实自定义作业已完整保留 ✨');
+  };
+
+  const handleRestoreUserTask = () => {
+    const userMathTask: HomeworkTask = {
+      id: `task-henry-math-1`,
+      subject: '数学',
+      subjectBadgeClass: getSubjectBadgeClass('数学'),
+      taskType: '作业练习',
+      title: '数学 · 作业练习专项',
+      estimatedMinutes: 22,
+      completed: false,
+      completedPomodoros: 0,
+    };
+    setHomeworkTasks((prev) => {
+      if (prev.some((t) => t.subject === '数学' && t.estimatedMinutes === 22)) {
+        return prev;
+      }
+      const next = [userMathTask, ...prev];
+      syncToCloudD1({ homeworkTasks: next });
+      return next;
+    });
+    showToast('已成功恢复您录入的「数学 · 作业练习 (22分钟)」✓');
   };
 
   const handleRestoreAllMockData = () => {
@@ -781,6 +872,7 @@ export default function App() {
     setReviewItems(INITIAL_REVIEW_ITEMS);
     setReviewBannerDismissed(false);
     setMistakes(INITIAL_MISTAKE_ITEMS);
+    setExamDataMap(EXAM_DATA_BY_PERIOD);
     setIsDemoPurged(false);
 
     try {
@@ -801,6 +893,10 @@ export default function App() {
       localStorage.setItem(
         STORAGE_KEY_MISTAKES,
         JSON.stringify(INITIAL_MISTAKE_ITEMS)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_EXAM_DATA_MAP,
+        JSON.stringify(EXAM_DATA_BY_PERIOD)
       );
     } catch {}
 
@@ -1406,6 +1502,29 @@ export default function App() {
                     </div>
                   )}
 
+                {/* 0.5. User Added Task Recovery Banner (e.g. if wiped during demo purge) */}
+                {!homeworkTasks.some(
+                  (t) => t.subject === '数学' && t.estimatedMinutes === 22
+                ) && (
+                  <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary-container/40 border border-secondary/25 text-xs text-on-surface shadow-2xs animate-fade-slide">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="material-symbols-outlined text-secondary text-[18px] shrink-0">
+                        restore
+                      </span>
+                      <span className="truncate font-medium">
+                        检测到您此前录入的作业「数学 · 作业练习 (22分钟)」
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRestoreUserTask}
+                      className="text-secondary hover:text-on-secondary-container font-bold cursor-pointer shrink-0 ml-2 text-[11px] bg-white px-3 py-1 rounded-full border border-secondary/35 shadow-2xs hover:bg-secondary-container/30 transition-colors"
+                    >
+                      一键找回恢复 ✓
+                    </button>
+                  </div>
+                )}
+
                 {/* 1. Conditional Top Review Banner (昨日作业小复盘) */}
                 <YesterdayReviewBanner
                   items={reviewItems}
@@ -1429,6 +1548,7 @@ export default function App() {
                 {/* 3. Section: 今日待攻克 (Homework Cards with Tactile Duration Sliders & Pomodoro) */}
                 <TodayHomeworkList
                   tasks={homeworkTasks}
+                  gradeClass={deskSettings.gradeClass}
                   pomodoroMinutes={deskSettings.pomodoroMinutes}
                   customSubjects={deskSettings.customSubjects}
                   onToggleTaskComplete={handleToggleTaskComplete}
@@ -1447,6 +1567,8 @@ export default function App() {
               <InsightsArchiveView
                 tasks={homeworkTasks}
                 mistakes={mistakes}
+                gradeClass={deskSettings.gradeClass}
+                isDemoPurged={isDemoPurged}
                 onClearMistake={handleClearMistake}
                 onRestoreMistake={handleRestoreMistake}
                 onDeleteMistake={handleDeleteMistake}
@@ -1456,7 +1578,7 @@ export default function App() {
                 examPeriod={examPeriod}
                 onSelectExamPeriod={setExamPeriod}
                 examScores={
-                  examDataMap[examPeriod] || examDataMap['10月月考']
+                  examDataMap[examPeriod] || []
                 }
                 onUpdateExamScores={handleUpdateExamScores}
                 customSubjects={deskSettings.customSubjects}
@@ -1477,6 +1599,7 @@ export default function App() {
               isOpen={true}
               onClose={() => {}}
               onAddTask={handleAddTaskFromCapsule}
+              gradeClass={deskSettings.gradeClass}
               extracurricularActivities={deskSettings.extracurricularActivities}
               peExercises={deskSettings.peExercises}
               activityConfigs={deskSettings.activityConfigs}
@@ -1653,6 +1776,7 @@ export default function App() {
         isOpen={isQuickSheetOpen}
         onClose={() => setIsQuickSheetOpen(false)}
         onAddTask={handleAddTaskFromCapsule}
+        gradeClass={deskSettings.gradeClass}
         extracurricularActivities={deskSettings.extracurricularActivities}
         peExercises={deskSettings.peExercises}
         activityConfigs={deskSettings.activityConfigs}

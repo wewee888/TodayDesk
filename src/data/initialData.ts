@@ -18,7 +18,7 @@ export const INITIAL_DESK_SETTINGS: DeskSettings = {
   studentName: '李子涵',
   gradeClass: '初二 (3) 班',
   pomodoroMinutes: 25,
-  customSubjects: ['道法', '地理', '生物', '科学', '信息科技'],
+  customSubjects: ['科学', '信息科技'],
   extracurricularActivities: DEFAULT_EXTRACURRICULAR_ACTIVITIES,
   peExercises: DEFAULT_PE_EXERCISES,
   activityConfigs: {

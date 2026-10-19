@@ -667,6 +667,153 @@ export const SUBJECT_BADGE_MAP: Record<SubjectName, string> = new Proxy(
   }
 );
 
+/**
+ * 依据中国义务教育初高中课程设置标准，智能提供对应年级的默认学科体系：
+ * - 初一（七年级）：语、数、英、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (无物理、无化学)
+ * - 初二（八年级）：语、数、英、物理、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (开物理，无化学)
+ * - 初三（九年级）：语、数、英、物理、化学、道法、历史、体育锻炼、课余兴趣、自主自习 (开化学，地生已小中考结业)
+ * - 高中（高一/高二/高三）：语、数、英、物理、化学、生物、历史、政治、地理、信息科技、体育锻炼、自主自习
+ * - 小学（一至六年级）：语、数、英、科学、道法、体育锻炼、课余兴趣、自主自习
+ */
+export function getDefaultSubjectsForGrade(gradeClass?: string): SubjectName[] {
+  const str = String(gradeClass || '').trim();
+
+  // 1. 初一（七年级）：初一绝不开设物理和化学
+  if (
+    str.includes('初一') ||
+    str.includes('七年级') ||
+    str.includes('7年级') ||
+    str.includes('初1') ||
+    str.includes('七年') ||
+    str.includes('G7') ||
+    str.includes('Grade 7')
+  ) {
+    return [
+      '语文',
+      '数学',
+      '英语',
+      '道法',
+      '历史',
+      '地理',
+      '生物',
+      '体育锻炼',
+      '课余兴趣',
+      '自主自习',
+    ];
+  }
+
+  // 2. 初二（八年级）：开物理，无化学 (地理生物在八年级结业考)
+  if (
+    str.includes('初二') ||
+    str.includes('八年级') ||
+    str.includes('8年级') ||
+    str.includes('初2') ||
+    str.includes('八年') ||
+    str.includes('G8') ||
+    str.includes('Grade 8')
+  ) {
+    return [
+      '语文',
+      '数学',
+      '英语',
+      '物理',
+      '道法',
+      '历史',
+      '地理',
+      '生物',
+      '体育锻炼',
+      '课余兴趣',
+      '自主自习',
+    ];
+  }
+
+  // 3. 初三（九年级）：开化学，中考冲刺 (地理生物已在八年级小中考结业)
+  if (
+    str.includes('初三') ||
+    str.includes('九年级') ||
+    str.includes('9年级') ||
+    str.includes('初3') ||
+    str.includes('九年') ||
+    str.includes('中考') ||
+    str.includes('G9') ||
+    str.includes('Grade 9')
+  ) {
+    return [
+      '语文',
+      '数学',
+      '英语',
+      '物理',
+      '化学',
+      '道法',
+      '历史',
+      '体育锻炼',
+      '课余兴趣',
+      '自主自习',
+    ];
+  }
+
+  // 4. 高中阶段（高一至高三）
+  if (
+    str.includes('高') ||
+    str.includes('高考') ||
+    str.includes('G10') ||
+    str.includes('G11') ||
+    str.includes('G12')
+  ) {
+    return [
+      '语文',
+      '数学',
+      '英语',
+      '物理',
+      '化学',
+      '生物',
+      '道法',
+      '历史',
+      '地理',
+      '信息科技',
+      '体育锻炼',
+      '自主自习',
+    ];
+  }
+
+  // 5. 小学阶段（一至六年级）
+  if (
+    str.includes('小') ||
+    str.includes('一') ||
+    str.includes('二') ||
+    str.includes('三') ||
+    str.includes('四') ||
+    str.includes('五') ||
+    str.includes('六')
+  ) {
+    return [
+      '语文',
+      '数学',
+      '英语',
+      '科学',
+      '道法',
+      '体育锻炼',
+      '课余兴趣',
+      '自主自习',
+    ];
+  }
+
+  // 默认兜底（初二配置）
+  return [
+    '语文',
+    '数学',
+    '英语',
+    '物理',
+    '道法',
+    '历史',
+    '地理',
+    '生物',
+    '体育锻炼',
+    '课余兴趣',
+    '自主自习',
+  ];
+}
+
 export const DEFAULT_SUBJECTS: SubjectName[] = [
   '数学',
   '语文',

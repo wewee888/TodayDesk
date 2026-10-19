@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { ExamScoreCard, HomeworkTask, SubjectName } from '../types/study';
-import { getSubjectBadgeClass } from '../utils/studyLogic';
+import { getDefaultSubjectsForGrade, getSubjectBadgeClass } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
 export type TimeDimension = 'week' | 'month' | 'quarter' | 'year';
@@ -8,6 +8,8 @@ export type TimeDimension = 'week' | 'month' | 'quarter' | 'year';
 interface MultiPeriodReportSectionProps {
   tasks: HomeworkTask[];
   examScores: ExamScoreCard[];
+  gradeClass?: string;
+  isDemoPurged?: boolean;
   customSubjects?: SubjectName[];
   onShowToast: (msg: string) => void;
 }
@@ -367,7 +369,14 @@ const BASE_SUBJECT_REPORT_DATA: {
 
 export const MultiPeriodReportSection: React.FC<
   MultiPeriodReportSectionProps
-> = ({ tasks, examScores, customSubjects = [], onShowToast }) => {
+> = ({
+  tasks,
+  examScores,
+  gradeClass,
+  isDemoPurged,
+  customSubjects = [],
+  onShowToast,
+}) => {
   const [dimension, setDimension] = useState<TimeDimension>('week');
   const [displayMode, setDisplayMode] = useState<'both' | 'chart' | 'table'>(
     'both'
@@ -382,8 +391,17 @@ export const MultiPeriodReportSection: React.FC<
 
   const meta = DIMENSION_META[dimension];
 
-  // Merge built-in subjects with any user-created custom subjects or exam score subjects
-  const allSubjectItems = [...BASE_SUBJECT_REPORT_DATA];
+  // Resolve curriculum subjects based on student's grade (e.g. 初一/初二 has no 化学)
+  const gradeBaseSubjects = getDefaultSubjectsForGrade(gradeClass);
+  const filteredBaseItems = BASE_SUBJECT_REPORT_DATA.filter((item) => {
+    if (gradeBaseSubjects.length > 0) {
+      return gradeBaseSubjects.includes(item.subject);
+    }
+    return true;
+  });
+
+  // Merge grade subjects with any user-created custom subjects or exam score subjects
+  const allSubjectItems = [...filteredBaseItems];
   const extraNames = Array.from(
     new Set([
       ...customSubjects,
@@ -424,15 +442,15 @@ export const MultiPeriodReportSection: React.FC<
       (t) => t.subject === item.subject && t.isAllCorrect
     ).length;
     const liveScoreCard = examScores.find((c) => c.subject === item.subject);
+    const hasLiveScore = Boolean(liveScoreCard);
 
-    const score = liveScoreCard ? liveScoreCard.score : item.defaultScore;
+    const score = liveScoreCard ? liveScoreCard.score : 0;
     const fullScore = liveScoreCard
       ? liveScoreCard.fullScore
       : item.defaultFullScore;
-    const scorePercent = Math.min(
-      100,
-      Math.round((score / Math.max(fullScore, 1)) * 100)
-    );
+    const scorePercent = hasLiveScore
+      ? Math.min(100, Math.round((score / Math.max(fullScore, 1)) * 100))
+      : 0;
 
     const periodMinutes =
       item.weeklyMinutes * meta.multiplier + liveTaskMinutes;
@@ -460,10 +478,19 @@ export const MultiPeriodReportSection: React.FC<
     if (scorePercent >= 93 || allCorrectRate >= 85) {
       statusBadge = '🌟 高效领跑';
       statusColorClass = 'bg-secondary-container text-on-secondary-container';
-    } else if (scorePercent < 88) {
+    } else if (hasLiveScore && scorePercent < 88) {
       statusBadge = '⚡ 提分空间';
       statusColorClass = 'bg-tertiary-fixed/70 text-tertiary';
+    } else if (!hasLiveScore && (isDemoPurged || examScores.length === 0)) {
+      statusBadge = '待录入';
+      statusColorClass = 'bg-surface-container text-on-surface-variant';
     }
+
+    const scoreText = hasLiveScore
+      ? `${score}/${fullScore}`
+      : isDemoPurged || examScores.length === 0
+      ? '待录入'
+      : `${item.defaultScore}/${item.defaultFullScore}`;
 
     return {
       subject: item.subject,
@@ -473,9 +500,13 @@ export const MultiPeriodReportSection: React.FC<
       totalTasks,
       allCorrectTimes,
       allCorrectRate,
-      scoreText: `${score}/${fullScore}`,
+      scoreText,
       scorePercent,
-      trendNote: liveScoreCard?.trendText || item.trendNote,
+      trendNote:
+        liveScoreCard?.trendText ||
+        (isDemoPurged || examScores.length === 0
+          ? '考分待录入 · 录入后呈现趋势'
+          : item.trendNote),
       statusBadge,
       statusColorClass,
     };
