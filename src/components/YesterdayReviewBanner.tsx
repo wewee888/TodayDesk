@@ -10,6 +10,7 @@ interface YesterdayReviewBannerProps {
     mistakeTag?: ReviewItem['mistakeTag'],
     hasPhoto?: boolean
   ) => void;
+  onDeleteItem?: (id: string) => void;
   onDismissAll: () => void;
   onRestoreBanner: () => void;
   onShowToast: (msg: string) => void;
@@ -19,6 +20,7 @@ export const YesterdayReviewBanner: React.FC<YesterdayReviewBannerProps> = ({
   items,
   isDismissed,
   onResolveItem,
+  onDeleteItem,
   onDismissAll,
   onRestoreBanner,
   onShowToast,
@@ -93,15 +95,30 @@ export const YesterdayReviewBanner: React.FC<YesterdayReviewBannerProps> = ({
                     {item.title}
                   </span>
                 </div>
-                {isResolved && (
-                  <span className="text-[11px] font-semibold text-secondary shrink-0">
-                    {item.status === 'all_correct'
-                      ? '🏆 已确认全对 (登全对榜) ✓'
-                      : item.status === 'fixed_minor'
-                      ? `小错已改${item.mistakeTag ? ` · ${item.mistakeTag}` : ''}`
-                      : `已入周末错题本${item.mistakeTag ? ` · ${item.mistakeTag}` : ''}`}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isResolved && (
+                    <span className="text-[11px] font-semibold text-secondary">
+                      {item.status === 'all_correct'
+                        ? '🏆 已确认全对 (登全对榜) ✓'
+                        : item.status === 'fixed_minor'
+                        ? `小错已改${item.mistakeTag ? ` · ${item.mistakeTag}` : ''}`
+                        : `已入周末错题本${item.mistakeTag ? ` · ${item.mistakeTag}` : ''}`}
+                    </span>
+                  )}
+                  {onDeleteItem && (
+                    <button
+                      type="button"
+                      aria-label={`移出昨日复盘 ${item.title}`}
+                      onClick={() => onDeleteItem(item.id)}
+                      className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                      title="移出此复盘项"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">
+                        close
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-1.5 pt-0.5 flex-wrap">

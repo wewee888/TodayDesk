@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   EfficiencyBubble,
   ExamPeriod,
@@ -16,12 +17,17 @@ import {
   resolveRecommendedExamPeriod,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
+import { MistakeEditModal } from './MistakeEditModal';
 
 interface InsightsArchiveViewProps {
   tasks?: HomeworkTask[];
   mistakes: MistakeItem[];
   onClearMistake: (id: string) => void;
   onRestoreMistake: (id: string) => void;
+  onDeleteMistake?: (id: string) => void;
+  onClearAllMistakes?: () => void;
+  onUpdateMistake?: (updated: MistakeItem) => void;
+  onAddMistake?: (newMistake: MistakeItem) => void;
   examPeriod: ExamPeriod;
   onSelectExamPeriod: (period: ExamPeriod) => void;
   examScores: ExamScoreCard[];
@@ -70,6 +76,10 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   mistakes,
   onClearMistake,
   onRestoreMistake,
+  onDeleteMistake,
+  onClearAllMistakes,
+  onUpdateMistake,
+  onAddMistake,
   examPeriod,
   onSelectExamPeriod,
   examScores,
@@ -85,6 +95,8 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
     useDragScroll<HTMLDivElement>();
   const [activeMistakeDetail, setActiveMistakeDetail] =
     useState<MistakeItem | null>(null);
+  const [editingMistake, setEditingMistake] = useState<MistakeItem | null>(null);
+  const [isAddingMistake, setIsAddingMistake] = useState(false);
   const [showAllMistakesModal, setShowAllMistakesModal] = useState(false);
   const [showFastScoreInput, setShowFastScoreInput] = useState(false);
   const [selectedBubble, setSelectedBubble] = useState<EfficiencyBubble | null>(
@@ -250,16 +262,50 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               {remainingMistakes} 题待消灭
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAllMistakesModal(true)}
-            className="inline-flex items-center gap-0.5 text-primary text-[12px] font-semibold hover:opacity-80 transition-opacity cursor-pointer"
-          >
-            <span>全部错题 ({11 + mistakes.length})</span>
-            <span className="material-symbols-outlined text-[16px]">
-              chevron_right
-            </span>
-          </button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsAddingMistake(true)}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary-fixed/50 hover:bg-primary-fixed text-primary px-2.5 py-1 rounded-full cursor-pointer transition-all shadow-2xs active:scale-95"
+              title="录入新错题"
+            >
+              <span className="material-symbols-outlined text-[14px]">
+                add_circle
+              </span>
+              <span>录入错题</span>
+            </button>
+            {onClearAllMistakes && mistakes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      '确定要清空全部错题记录吗？清空后您可以录入属于您自己的真实错题。'
+                    )
+                  ) {
+                    onClearAllMistakes();
+                  }
+                }}
+                className="flex items-center gap-1 text-[11px] text-outline hover:text-error cursor-pointer transition-colors px-2 py-0.5 rounded-full hover:bg-error-container/20"
+                title="一键清空所有错题"
+              >
+                <span className="material-symbols-outlined text-[13px]">
+                  delete_sweep
+                </span>
+                <span>清空错题</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowAllMistakesModal(true)}
+              className="inline-flex items-center gap-0.5 text-primary text-[12px] font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <span>全部错题 ({mistakes.length})</span>
+              <span className="material-symbols-outlined text-[16px]">
+                chevron_right
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Swipeable Card Carousel (supports PC left-mouse hold & drag) */}
@@ -284,39 +330,79 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                 <div className="absolute -right-4 -top-4 w-16 h-16 rounded-full bg-tertiary-container/10 pointer-events-none" />
 
                 <div className="flex flex-col space-y-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-1.5">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide ${item.badgeClass}`}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-wide truncate max-w-[100px] ${item.badgeClass}`}
+                      title={item.sourceLabel}
                     >
                       {item.sourceLabel}
                     </span>
 
-                    {item.cleared ? (
-                      <span className="text-[11px] text-secondary font-semibold flex items-center gap-0.5">
-                        <span className="material-symbols-outlined text-[14px]">
-                          verified
+                    <div className="flex items-center gap-1 shrink-0">
+                      {item.cleared ? (
+                        <span className="text-[11px] text-secondary font-semibold flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[13px]">
+                            verified
+                          </span>
+                          已归档
                         </span>
-                        已归档销项
-                      </span>
-                    ) : item.statusType === 'repeat' ? (
-                      <span className="text-[11px] text-error font-semibold flex items-center gap-0.5">
-                        <span className="material-symbols-outlined text-[14px]">
-                          history
+                      ) : item.statusType === 'repeat' ? (
+                        <span className="text-[11px] text-error font-semibold flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[13px]">
+                            history
+                          </span>
+                          {item.statusText}
                         </span>
-                        {item.statusText}
-                      </span>
-                    ) : item.statusType === 'keypoint' ? (
-                      <span className="text-[11px] text-error font-semibold flex items-center gap-0.5">
-                        <span className="material-symbols-outlined text-[14px]">
-                          flag
+                      ) : item.statusType === 'keypoint' ? (
+                        <span className="text-[11px] text-error font-semibold flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[13px]">
+                            flag
+                          </span>
+                          {item.statusText}
                         </span>
-                        {item.statusText}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-on-surface-variant font-medium">
-                        {item.statusText}
-                      </span>
-                    )}
+                      ) : (
+                        <span className="text-[11px] text-on-surface-variant font-medium">
+                          {item.statusText}
+                        </span>
+                      )}
+
+                      {/* Edit Button */}
+                      <button
+                        type="button"
+                        aria-label={`修改错题 ${item.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingMistake(item);
+                        }}
+                        className="px-1.5 py-0.5 rounded-full bg-surface-container hover:bg-primary-fixed/60 text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer transition-colors text-[11px] font-semibold"
+                        title="修改此题（科目、错因、题干与解法）"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">
+                          edit
+                        </span>
+                        <span>修改</span>
+                      </button>
+
+                      {/* Delete Button */}
+                      {onDeleteMistake && (
+                        <button
+                          type="button"
+                          aria-label={`删除错题 ${item.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`确定删除错题「${item.title}」吗？`)) {
+                              onDeleteMistake(item.id);
+                            }
+                          }}
+                          className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                          title="彻底删除此错题"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">
+                            delete
+                          </span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-3 items-start">
@@ -1304,161 +1390,346 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </button>
       </div>
 
-      {/* Modal for Single Mistake Solution & Retry */}
-      {activeMistakeDetail && (
-        <div
-          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setActiveMistakeDetail(null)}
-        >
+      {/* Modal for Single Mistake Solution & Retry (via createPortal to break out of containing blocks) */}
+      {activeMistakeDetail &&
+        createPortal(
           <div
-            className="bg-[#FDFBF7] rounded-3xl max-w-md w-full p-5 shadow-xl border border-[#EAE4DA] space-y-4"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label={activeMistakeDetail.title}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            onClick={() => setActiveMistakeDetail(null)}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${activeMistakeDetail.badgeClass}`}
-                >
-                  {activeMistakeDetail.sourceLabel}
-                </span>
-                <h3 className="text-lg font-bold text-on-surface mt-1.5">
-                  {activeMistakeDetail.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                aria-label="关闭错题详情"
-                onClick={() => setActiveMistakeDetail(null)}
-                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-surface-container-low text-xs text-on-surface-variant space-y-1.5">
-              <div className="font-semibold text-on-surface">原题节选：</div>
-              <p className="leading-relaxed">{activeMistakeDetail.excerpt}</p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-secondary-container/30 border border-secondary/20 text-xs space-y-1.5">
-              <div className="font-bold text-secondary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px]">
-                  lightbulb
-                </span>
-                <span>审题与满分解题钥匙</span>
-              </div>
-              <p className="text-on-surface leading-relaxed">
-                {activeMistakeDetail.solutionDetail}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setActiveMistakeDetail(null)}
-                className="flex-1 py-2.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high cursor-pointer"
-              >
-                留着周末再看
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onClearMistake(activeMistakeDetail.id);
-                  onShowToast(
-                    `「${activeMistakeDetail.title}」已重练过关并归档 ✓`
-                  );
-                  setActiveMistakeDetail(null);
-                }}
-                className="flex-1 py-2.5 rounded-full bg-secondary text-on-secondary text-xs font-semibold shadow-sm hover:bg-secondary/90 cursor-pointer flex items-center justify-center gap-1"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  check_circle
-                </span>
-                <span>已重做过关 ✓</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal for All Mistakes Overview */}
-      {showAllMistakesModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setShowAllMistakesModal(false)}
-        >
-          <div
-            className="bg-[#FDFBF7] rounded-3xl max-w-lg w-full p-5 shadow-xl border border-[#EAE4DA] space-y-4 max-h-[82vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="全部错题档案库"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-on-surface">
-                  本学期错题清账总库
-                </h3>
-                <p className="text-xs text-on-surface-variant">
-                  累计收录 14 道 · 已彻底攻克 {clearedCount + 6} 道 · 待消灭{' '}
-                  {remainingMistakes} 道
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="关闭错题总库"
-                onClick={() => setShowAllMistakesModal(false)}
-                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2.5 overflow-y-auto pr-1">
-              {mistakes.map((m) => (
-                <div
-                  key={m.id}
-                  className="p-3 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${m.badgeClass}`}
-                      >
-                        {m.sourceLabel}
+            <div
+              className="bg-[#FDFBF7] rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-[#EAE4DA] space-y-4 max-h-[90vh] flex flex-col animate-scale-pop"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={activeMistakeDetail.title}
+            >
+              <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#EAE4DA]/70">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${activeMistakeDetail.badgeClass}`}
+                    >
+                      {activeMistakeDetail.sourceLabel}
+                    </span>
+                    <span
+                      className={`inline-flex items-center text-[11px] font-semibold ${activeMistakeDetail.reasonColorClass}`}
+                    >
+                      <span className="material-symbols-outlined text-[13px] mr-0.5">
+                        {activeMistakeDetail.reasonIcon}
                       </span>
-                      <span className="text-xs font-semibold text-on-surface truncate">
-                        {m.title}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-on-surface-variant mt-1 truncate">
-                      {m.reasonText} — {m.excerpt}
-                    </p>
+                      {activeMistakeDetail.reasonText}
+                    </span>
                   </div>
+                  <h3 className="text-base sm:text-lg font-bold text-on-surface mt-1.5 truncate">
+                    {activeMistakeDetail.title}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="修改此错题"
+                    onClick={() => {
+                      const target = activeMistakeDetail;
+                      setActiveMistakeDetail(null);
+                      setEditingMistake(target);
+                    }}
+                    className="px-2.5 py-1 rounded-full bg-surface-container hover:bg-primary-fixed/60 text-xs font-semibold text-on-surface-variant hover:text-primary flex items-center gap-1 cursor-pointer transition-colors"
+                    title="修改此错题"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">
+                      edit
+                    </span>
+                    <span>修改</span>
+                  </button>
+
+                  {onDeleteMistake && (
+                    <button
+                      type="button"
+                      aria-label="删除此错题"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `确定要彻底删除错题「${activeMistakeDetail.title}」吗？`
+                          )
+                        ) {
+                          onDeleteMistake(activeMistakeDetail.id);
+                          setActiveMistakeDetail(null);
+                        }
+                      }}
+                      className="w-8 h-8 rounded-full hover:bg-error-container text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                      title="彻底删除此错题"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">
+                        delete
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    aria-label="关闭错题详情"
+                    onClick={() => setActiveMistakeDetail(null)}
+                    className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3 text-xs">
+                <div className="p-3.5 rounded-2xl bg-surface-container-low text-on-surface-variant space-y-1.5 border border-[#EAE4DA]/60">
+                  <div className="font-bold text-on-surface flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[15px] text-primary">
+                      menu_book
+                    </span>
+                    <span>原题节选与题干：</span>
+                  </div>
+                  <p className="leading-relaxed whitespace-pre-wrap">
+                    {activeMistakeDetail.excerpt}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-secondary-container/25 border border-secondary/25 space-y-2">
+                  <div className="font-bold text-secondary flex items-center gap-1 text-[13px]">
+                    <span className="material-symbols-outlined text-[17px]">
+                      lightbulb
+                    </span>
+                    <span>审题与满分解题钥匙</span>
+                  </div>
+                  <p className="text-on-surface leading-relaxed whitespace-pre-wrap font-mono text-xs">
+                    {activeMistakeDetail.solutionDetail}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-[#EAE4DA]">
+                <button
+                  type="button"
+                  onClick={() => setActiveMistakeDetail(null)}
+                  className="px-4 py-2.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high cursor-pointer"
+                >
+                  留着周末再看
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = activeMistakeDetail;
+                    setActiveMistakeDetail(null);
+                    setEditingMistake(target);
+                  }}
+                  className="px-3.5 py-2.5 rounded-full bg-surface-container hover:bg-primary-fixed/60 text-on-surface-variant hover:text-primary text-xs font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    edit
+                  </span>
+                  <span>修改题目</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearMistake(activeMistakeDetail.id);
+                    onShowToast(
+                      `「${activeMistakeDetail.title}」已重练过关并归档 ✓`
+                    );
+                    setActiveMistakeDetail(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-full bg-secondary text-on-secondary text-xs font-bold shadow-sm hover:bg-secondary/90 cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    check_circle
+                  </span>
+                  <span>已重做过关 ✓</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Modal for All Mistakes Overview (via createPortal) */}
+      {showAllMistakesModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            onClick={() => setShowAllMistakesModal(false)}
+          >
+            <div
+              className="bg-[#FDFBF7] rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-[#EAE4DA] space-y-4 max-h-[85vh] flex flex-col animate-scale-pop"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label="全部错题档案库"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-[#EAE4DA]">
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-on-surface">
+                    本学期错题清账总库
+                  </h3>
+                  <p className="text-xs text-on-surface-variant">
+                    收录 {mistakes.length} 道错题 · 待攻克 {remainingMistakes} 道 · 已完成 {clearedCount} 道
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      if (m.cleared) {
-                        onRestoreMistake(m.id);
-                      } else {
-                        onClearMistake(m.id);
-                      }
+                      setShowAllMistakesModal(false);
+                      setIsAddingMistake(true);
                     }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 cursor-pointer ${
-                      m.cleared
-                        ? 'bg-surface-container text-secondary'
-                        : 'bg-secondary text-on-secondary'
-                    }`}
+                    className="px-3 py-1 rounded-full bg-primary text-on-primary text-xs font-bold cursor-pointer hover:bg-primary-container flex items-center gap-1 shadow-2xs"
                   >
-                    {m.cleared ? '已销项 ✓' : '标记过关'}
+                    <span className="material-symbols-outlined text-[14px]">
+                      add
+                    </span>
+                    <span>录入新错题</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="关闭错题总库"
+                    onClick={() => setShowAllMistakesModal(false)}
+                    className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant cursor-pointer"
+                  >
+                    ✕
                   </button>
                 </div>
-              ))}
+              </div>
+
+              <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
+                {mistakes.length === 0 ? (
+                  <div className="py-12 text-center text-on-surface-variant space-y-2">
+                    <span className="material-symbols-outlined text-4xl text-outline/60">
+                      verified
+                    </span>
+                    <p className="text-xs font-semibold">
+                      错题本干干净净，暂无待清账错题！
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllMistakesModal(false);
+                        setIsAddingMistake(true);
+                      }}
+                      className="px-4 py-1.5 rounded-full bg-primary text-on-primary text-xs font-bold cursor-pointer hover:bg-primary-container inline-flex items-center gap-1"
+                    >
+                      <span>+ 录入第一道错题</span>
+                    </button>
+                  </div>
+                ) : (
+                  mistakes.map((m) => (
+                    <div
+                      key={m.id}
+                      className="p-3.5 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${m.badgeClass}`}
+                          >
+                            {m.sourceLabel}
+                          </span>
+                          <span className="text-xs font-bold text-on-surface truncate">
+                            {m.title}
+                          </span>
+                          <span
+                            className={`inline-flex items-center text-[10px] font-semibold ${m.reasonColorClass}`}
+                          >
+                            {m.reasonText}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-1">
+                          {m.excerpt}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAllMistakesModal(false);
+                            setEditingMistake(m);
+                          }}
+                          className="px-2 py-1 rounded-full bg-surface-container hover:bg-primary-fixed/60 text-xs font-semibold text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer transition-colors"
+                          title="修改此错题"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">
+                            edit
+                          </span>
+                          <span>修改</span>
+                        </button>
+
+                        {/* Delete Button */}
+                        {onDeleteMistake && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`确定删除错题「${m.title}」吗？`)) {
+                                onDeleteMistake(m.id);
+                              }
+                            }}
+                            className="w-7 h-7 rounded-full hover:bg-error-container text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                            title="删除该错题"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              delete
+                            </span>
+                          </button>
+                        )}
+
+                        {/* Clear / Restore Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (m.cleared) {
+                              onRestoreMistake(m.id);
+                            } else {
+                              onClearMistake(m.id);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${
+                            m.cleared
+                              ? 'bg-surface-container text-secondary'
+                              : 'bg-secondary text-on-secondary'
+                          }`}
+                        >
+                          {m.cleared ? '已销项 ✓' : '标记过关'}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
+
+      {/* Edit or Add Mistake Modal */}
+      <MistakeEditModal
+        isOpen={isAddingMistake || Boolean(editingMistake)}
+        initialMistake={editingMistake}
+        customSubjects={customSubjects}
+        onSave={(saved) => {
+          if (editingMistake) {
+            if (onUpdateMistake) onUpdateMistake(saved);
+            onShowToast(`已修改错题「${saved.title}」✓`);
+          } else {
+            if (onAddMistake) onAddMistake(saved);
+            onShowToast(`已录入新错题「${saved.title}」✓`);
+          }
+          setEditingMistake(null);
+          setIsAddingMistake(false);
+        }}
+        onDelete={(id) => {
+          if (onDeleteMistake) onDeleteMistake(id);
+          setEditingMistake(null);
+          setIsAddingMistake(false);
+        }}
+        onClose={() => {
+          setEditingMistake(null);
+          setIsAddingMistake(false);
+        }}
+      />
     </div>
   );
 };

@@ -20,6 +20,9 @@ interface StoredAccount extends UserAccountProfile {
 
 const STORAGE_ACCOUNTS_KEY = 'warm_desk_registered_accounts_v1';
 const STORAGE_KEY_DESK_SETTINGS = 'todaydesk_desk_settings_v1';
+const STORAGE_KEY_REMEMBER_CREDENTIALS = 'todaydesk_remember_credentials_v1';
+const STORAGE_KEY_LAST_LOGIN_ACCOUNT = 'todaydesk_last_login_account_v1';
+const STORAGE_KEY_LAST_LOGIN_PASSWORD = 'todaydesk_last_login_password_v1';
 
 function getActivePresetInfo(): { studentName: string; gradeClass: string } {
   try {
@@ -117,9 +120,33 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [role, setRole] = useState<'student' | 'parent'>('student');
 
-  // Login form state
-  const [loginAccount, setLoginAccount] = useState('lizihan');
-  const [loginPassword, setLoginPassword] = useState('123456');
+  // Check if user previously opted to remember credentials (defaults to true)
+  const [rememberCredentials, setRememberCredentials] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_REMEMBER_CREDENTIALS);
+      return saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  // Login form state: prioritize real registered user credentials over demo credentials
+  const [loginAccount, setLoginAccount] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT);
+      if (saved && saved.trim()) return saved.trim();
+    } catch {}
+    return 'lizihan';
+  });
+
+  const [loginPassword, setLoginPassword] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LAST_LOGIN_PASSWORD);
+      if (saved && saved.trim()) return saved.trim();
+    } catch {}
+    return '123456';
+  });
+
   const [showPassword, setShowPassword] = useState(false);
 
   // Register form state
@@ -160,9 +187,23 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
     if (matched) {
       if (matched.password !== trimmedPass) {
-        setErrorMessage('密码不正确，示范账号密码为 123456');
+        setErrorMessage('密码不正确，请重新输入');
         return;
       }
+
+      // Persist real registered user credentials
+      try {
+        if (rememberCredentials) {
+          localStorage.setItem(STORAGE_KEY_REMEMBER_CREDENTIALS, 'true');
+          localStorage.setItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT, matched.account);
+          localStorage.setItem(STORAGE_KEY_LAST_LOGIN_PASSWORD, trimmedPass);
+        } else {
+          localStorage.setItem(STORAGE_KEY_REMEMBER_CREDENTIALS, 'false');
+          localStorage.removeItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT);
+          localStorage.removeItem(STORAGE_KEY_LAST_LOGIN_PASSWORD);
+        }
+      } catch {}
+
       onAuthenticated(
         {
           account: matched.account,
@@ -181,6 +222,18 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       setErrorMessage('密码长度至少为 4 位字符');
       return;
     }
+
+    try {
+      if (rememberCredentials) {
+        localStorage.setItem(STORAGE_KEY_REMEMBER_CREDENTIALS, 'true');
+        localStorage.setItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT, trimmedAccount);
+        localStorage.setItem(STORAGE_KEY_LAST_LOGIN_PASSWORD, trimmedPass);
+      } else {
+        localStorage.setItem(STORAGE_KEY_REMEMBER_CREDENTIALS, 'false');
+        localStorage.removeItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT);
+        localStorage.removeItem(STORAGE_KEY_LAST_LOGIN_PASSWORD);
+      }
+    } catch {}
 
     const fallbackProfile: UserAccountProfile = {
       account: trimmedAccount,
@@ -238,6 +291,13 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       (a) => a.account.toLowerCase() !== trimmedAcc.toLowerCase()
     );
     saveStoredAccounts([newEntry, ...filtered]);
+
+    // Automatically remember the newly registered user's credentials!
+    try {
+      localStorage.setItem(STORAGE_KEY_REMEMBER_CREDENTIALS, 'true');
+      localStorage.setItem(STORAGE_KEY_LAST_LOGIN_ACCOUNT, newEntry.account);
+      localStorage.setItem(STORAGE_KEY_LAST_LOGIN_PASSWORD, newEntry.password);
+    } catch {}
 
     onAuthenticated(
       {
@@ -594,6 +654,36 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                       </button>
                     </div>
                   </label>
+
+                  {/* Remember credentials & Quick Demo option */}
+                  <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-on-surface-variant hover:text-on-surface">
+                      <input
+                        type="checkbox"
+                        checked={rememberCredentials}
+                        onChange={(e) => setRememberCredentials(e.target.checked)}
+                        className="rounded border-[#EAE4DA] text-primary focus:ring-primary w-4 h-4 cursor-pointer accent-primary"
+                      />
+                      <span className="font-medium">记住登录名和密码</span>
+                    </label>
+
+                    {loginAccount !== 'lizihan' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginAccount('lizihan');
+                          setLoginPassword('123456');
+                        }}
+                        className="text-[11px] text-outline hover:text-primary transition-colors cursor-pointer"
+                      >
+                        切为示范账号
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-outline">
+                        示范账号已填入
+                      </span>
+                    )}
+                  </div>
 
                   <button
                     type="submit"

@@ -260,8 +260,6 @@ export const INITIAL_MISTAKE_ITEMS: MistakeItem[] = [
     reasonColorClass: 'text-tertiary',
     excerpt:
       '已知抛物线经过原点且对称轴为 x = 2，求区间 [-1, 3] 上的最大值与最小值...',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAq6wwtMOiYiYr43n2KPb4DcX1CdWnBm_zChKfE4BhzcNi_9BSfypwusPQT1Bb1HkRNCmZZINFJXvmKI0QhRacEL4nZKvVgrc0ENsi1u4J6w5N6qXE23yCouc1J04yPjKrqkT1smdDENoihm5k6SRgS3qnqYHiWblronAeMWPxmsDz5UFU4FPyP-SidPS7CScUYnPLM5PZxD8BM8N8ykj9UadSBidDfsEIAMOY3rJ8bphlFfz5S1y0aOw',
     cleared: false,
     ctaLabel: '已重做过关 ✓',
     ctaStyle: 'secondary',
@@ -301,8 +299,6 @@ export const INITIAL_MISTAKE_ITEMS: MistakeItem[] = [
     reasonColorClass: 'text-on-surface-variant',
     excerpt:
       '蜡烛放在距透镜 15cm 处，在光屏上得到放大的倒立像，透镜焦距可能为...',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBs5ah_zAOXMzM3RDP8m3ZfTIQiaZtDoXkJpfKCqsMsc6ZeOMClu4DcanxbpUSojYUSlUrZTOuSKrhYsi0rOb8yR8yAsvpO8EdOheEGr1BO3ewfxTvLyKwqLTabCMhbiok-zhIRh85m4PYz2q4qCHMTx158n1Y-6jSRABTAqlYXtpSnkAnG4svi55j-_A7hWe-bPb7J86rH4L5Q6tiBUcUXyka--heVAKcr8MLOx1InVsOWibshrfZzeg',
     cleared: false,
     ctaLabel: '看错题解析',
     ctaStyle: 'neutral',

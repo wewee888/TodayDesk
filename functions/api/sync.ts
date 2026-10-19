@@ -139,6 +139,59 @@ export async function onRequestPost(context: any): Promise<Response> {
 
     const statements: any[] = [];
 
+    // Support one-click purge of all mock data for this account
+    if (payload.purgeMockData === true) {
+      statements.push(
+        env.DB.prepare('DELETE FROM homework_tasks WHERE account = ?').bind(account)
+      );
+      statements.push(
+        env.DB.prepare('DELETE FROM routine_schedules WHERE account = ?').bind(account)
+      );
+      statements.push(
+        env.DB.prepare('DELETE FROM mistakes WHERE account = ?').bind(account)
+      );
+    }
+
+    if (payload.clearAllTasks === true) {
+      statements.push(
+        env.DB.prepare('DELETE FROM homework_tasks WHERE account = ?').bind(account)
+      );
+    }
+    if (payload.clearAllSchedules === true) {
+      statements.push(
+        env.DB.prepare('DELETE FROM routine_schedules WHERE account = ?').bind(account)
+      );
+    }
+    if (payload.clearAllMistakes === true) {
+      statements.push(
+        env.DB.prepare('DELETE FROM mistakes WHERE account = ?').bind(account)
+      );
+    }
+    if (payload.deletedTaskId) {
+      statements.push(
+        env.DB.prepare('DELETE FROM homework_tasks WHERE id = ? AND account = ?').bind(
+          payload.deletedTaskId,
+          account
+        )
+      );
+    }
+    if (payload.deletedScheduleId) {
+      statements.push(
+        env.DB.prepare('DELETE FROM routine_schedules WHERE id = ? AND account = ?').bind(
+          payload.deletedScheduleId,
+          account
+        )
+      );
+    }
+    if (payload.deletedMistakeId) {
+      statements.push(
+        env.DB.prepare('DELETE FROM mistakes WHERE id = ? AND account = ?').bind(
+          payload.deletedMistakeId,
+          account
+        )
+      );
+    }
+
     // 1. Upsert User
     if (profile) {
       statements.push(

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   AttendanceStatus,
   ScheduleFrequencyType,
@@ -186,6 +187,24 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
                         </span>
                       </button>
                     )}
+                    {onDeleteSchedule && (
+                      <button
+                        type="button"
+                        aria-label={`删除日程 ${item.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`确定删除日程「${item.title}」吗？`)) {
+                            onDeleteSchedule(item.id);
+                          }
+                        }}
+                        className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                        title="删除该日程"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">
+                          delete
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -268,11 +287,12 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
       </div>
 
       {/* Edit Schedule / Leave & Pause Modal */}
-      {editingItem && (
-        <div
-          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setEditingItem(null)}
-        >
+      {editingItem &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setEditingItem(null)}
+          >
           <form
             onSubmit={handleSaveEdit}
             onClick={(e) => e.stopPropagation()}
@@ -487,7 +507,8 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
               </div>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

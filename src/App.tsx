@@ -47,6 +47,12 @@ import {
 const STORAGE_KEY_DESK_SETTINGS = 'todaydesk_desk_settings_v1';
 const STORAGE_KEY_ACTIVE_USER = 'todaydesk_active_user_v1';
 const STORAGE_KEY_HOMEWORK_TASKS = 'todaydesk_homework_tasks_v1';
+const STORAGE_KEY_SCHEDULES = 'todaydesk_schedules_v1';
+const STORAGE_KEY_REVIEW_ITEMS = 'todaydesk_review_items_v1';
+const STORAGE_KEY_REVIEW_DISMISSED = 'todaydesk_review_dismissed_v1';
+const STORAGE_KEY_MISTAKES = 'todaydesk_mistakes_v1';
+const STORAGE_KEY_DEMO_PURGED = 'todaydesk_demo_data_purged_v1';
+const STORAGE_KEY_LAST_LOGIN_ACCOUNT = 'todaydesk_last_login_account_v1';
 const STORAGE_KEY_ACCOUNTS = 'warm_desk_registered_accounts_v1';
 const STORAGE_KEY_LOGGED_IN = 'todaydesk_logged_in_v1';
 
@@ -159,23 +165,68 @@ export default function App() {
   const [isDeskSettingsOpen, setIsDeskSettingsOpen] = useState(false);
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
 
+  const [isDemoPurged, setIsDemoPurged] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // View 1 state: Yesterday review, routine schedules, today's homework tasks
-  const [reviewItems, setReviewItems] =
-    useState<ReviewItem[]>(INITIAL_REVIEW_ITEMS);
-  const [reviewBannerDismissed, setReviewBannerDismissed] = useState(false);
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(
-    INITIAL_SCHEDULE_ITEMS
-  );
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+        const raw = localStorage.getItem(STORAGE_KEY_REVIEW_ITEMS);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
+        if (isPurged) return [];
+      } catch {}
+    }
+    return INITIAL_REVIEW_ITEMS;
+  });
+
+  const [reviewBannerDismissed, setReviewBannerDismissed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+        if (isPurged) return true;
+        const raw = localStorage.getItem(STORAGE_KEY_REVIEW_DISMISSED);
+        if (raw !== null) return raw === 'true';
+      } catch {}
+    }
+    return false;
+  });
+
+  const [schedules, setSchedules] = useState<ScheduleItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+        const raw = localStorage.getItem(STORAGE_KEY_SCHEDULES);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
+        if (isPurged) return [];
+      } catch {}
+    }
+    return INITIAL_SCHEDULE_ITEMS;
+  });
+
   const [homeworkTasks, setHomeworkTasks] = useState<HomeworkTask[]>(() => {
     if (typeof window !== 'undefined') {
       try {
+        const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
         const raw = localStorage.getItem(STORAGE_KEY_HOMEWORK_TASKS);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            return parsed;
-          }
+          if (Array.isArray(parsed)) return parsed;
         }
+        if (isPurged) return [];
       } catch {}
     }
     return INITIAL_HOMEWORK_TASKS;
@@ -191,13 +242,47 @@ export default function App() {
     } catch {}
   }, [homeworkTasks]);
 
+  // Automatically persist schedules whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(schedules));
+    } catch {}
+  }, [schedules]);
+
+  // Automatically persist reviewItems & reviewBannerDismissed whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_REVIEW_ITEMS, JSON.stringify(reviewItems));
+      localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, String(reviewBannerDismissed));
+    } catch {}
+  }, [reviewItems, reviewBannerDismissed]);
+
   // View 2 state: Quick 3-second capsule sheet modal
   const [isQuickSheetOpen, setIsQuickSheetOpen] = useState(false);
 
   // View 3 state: Mistakes & Exam Archive
-  const [mistakes, setMistakes] = useState<MistakeItem[]>(
-    INITIAL_MISTAKE_ITEMS
-  );
+  const [mistakes, setMistakes] = useState<MistakeItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const isPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED) === 'true';
+        const raw = localStorage.getItem(STORAGE_KEY_MISTAKES);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
+        if (isPurged) return [];
+      } catch {}
+    }
+    return INITIAL_MISTAKE_ITEMS;
+  });
+
+  // Automatically persist mistakes whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify(mistakes));
+    } catch {}
+  }, [mistakes]);
+
   const [examPeriod, setExamPeriod] = useState<ExamPeriod>('10月月考');
   const [examDataMap, setExamDataMap] =
     useState<Record<ExamPeriod, ExamScoreCard[]>>(EXAM_DATA_BY_PERIOD);
@@ -263,6 +348,13 @@ export default function App() {
       homeworkTasks?: HomeworkTask[];
       schedules?: ScheduleItem[];
       mistakes?: MistakeItem[];
+      purgeMockData?: boolean;
+      clearAllTasks?: boolean;
+      clearAllSchedules?: boolean;
+      clearAllMistakes?: boolean;
+      deletedTaskId?: string;
+      deletedScheduleId?: string;
+      deletedMistakeId?: string;
     }) => {
       if (!currentUserProfile?.account) return;
       try {
@@ -273,9 +365,25 @@ export default function App() {
             account: currentUserProfile.account,
             profile: currentUserProfile,
             deskSettings: overrides?.deskSettings || deskSettings,
-            homeworkTasks: overrides?.homeworkTasks || homeworkTasks,
-            schedules: overrides?.schedules || schedules,
-            mistakes: overrides?.mistakes || mistakes,
+            homeworkTasks:
+              overrides?.homeworkTasks !== undefined
+                ? overrides.homeworkTasks
+                : homeworkTasks,
+            schedules:
+              overrides?.schedules !== undefined
+                ? overrides.schedules
+                : schedules,
+            mistakes:
+              overrides?.mistakes !== undefined
+                ? overrides.mistakes
+                : mistakes,
+            purgeMockData: overrides?.purgeMockData,
+            clearAllTasks: overrides?.clearAllTasks,
+            clearAllSchedules: overrides?.clearAllSchedules,
+            clearAllMistakes: overrides?.clearAllMistakes,
+            deletedTaskId: overrides?.deletedTaskId,
+            deletedScheduleId: overrides?.deletedScheduleId,
+            deletedMistakeId: overrides?.deletedMistakeId,
           }),
         });
       } catch {}
@@ -368,8 +476,17 @@ export default function App() {
     showToast(`已更新日程：${updated.title} (${updated.timeText}) ✓`);
   };
 
+  const handleDeleteReviewItem = (id: string) => {
+    setReviewItems((prev) => prev.filter((r) => r.id !== id));
+    showToast('已从昨日复盘移出该项');
+  };
+
   const handleDeleteSchedule = (id: string) => {
-    setSchedules((prev) => prev.filter((s) => s.id !== id));
+    setSchedules((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+      syncToCloudD1({ schedules: filtered, deletedScheduleId: id });
+      return filtered;
+    });
     showToast('已删除该固定日程');
   };
 
@@ -497,12 +614,17 @@ export default function App() {
   };
 
   const handleDeleteTask = (id: string) => {
-    setHomeworkTasks((prev) => prev.filter((t) => t.id !== id));
+    setHomeworkTasks((prev) => {
+      const filtered = prev.filter((t) => t.id !== id);
+      syncToCloudD1({ homeworkTasks: filtered, deletedTaskId: id });
+      return filtered;
+    });
     showToast('已删除该待办任务 ✓');
   };
 
   const handleClearAllTasks = () => {
     setHomeworkTasks([]);
+    syncToCloudD1({ homeworkTasks: [], clearAllTasks: true });
     showToast('已清空书桌任务，现在可以添加您的专属作业啦 ✨');
   };
 
@@ -581,6 +703,114 @@ export default function App() {
     setMistakes((prev) =>
       prev.map((m) => (m.id === id ? { ...m, cleared: false } : m))
     );
+  };
+
+  const handleDeleteMistake = (id: string) => {
+    setMistakes((prev) => {
+      const filtered = prev.filter((m) => m.id !== id);
+      syncToCloudD1({ mistakes: filtered, deletedMistakeId: id });
+      return filtered;
+    });
+    showToast('已彻底删除该错题记录');
+  };
+
+  const handleClearAllMistakes = () => {
+    setMistakes([]);
+    syncToCloudD1({ mistakes: [], clearAllMistakes: true });
+    showToast('已清空全部错题记录');
+  };
+
+  const handleUpdateMistake = (updated: MistakeItem) => {
+    setMistakes((prev) => {
+      const next = prev.map((m) => (m.id === updated.id ? updated : m));
+      syncToCloudD1({ mistakes: next });
+      return next;
+    });
+    showToast(`已更新错题「${updated.title}」✓`);
+  };
+
+  const handleAddMistake = (newMistake: MistakeItem) => {
+    setMistakes((prev) => {
+      const next = [newMistake, ...prev];
+      syncToCloudD1({ mistakes: next });
+      return next;
+    });
+    showToast(`已录入新错题「${newMistake.title}」✓`);
+  };
+
+  const handlePurgeAllMockData = () => {
+    if (
+      !window.confirm(
+        '确定要一键清空全部示范数据吗？\n\n将一次性清除：\n• 示例作业清单\n• 示例固定习惯日程与打卡（跳远、练琴等）\n• 昨日作业小复盘\n• 示例错题本记录\n\n您的学生姓名、班级和番茄钟等个性化配置将完整保留。'
+      )
+    ) {
+      return;
+    }
+
+    setHomeworkTasks([]);
+    setSchedules([]);
+    setReviewItems([]);
+    setReviewBannerDismissed(true);
+    setMistakes([]);
+    setIsDemoPurged(true);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
+      localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_REVIEW_ITEMS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, 'true');
+      localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify([]));
+    } catch {}
+
+    syncToCloudD1({
+      homeworkTasks: [],
+      schedules: [],
+      mistakes: [],
+      purgeMockData: true,
+    });
+
+    showToast('已成功清空全部示范数据！欢迎开启专属于你的纯净书桌 ✨');
+  };
+
+  const handleRestoreAllMockData = () => {
+    if (!window.confirm('确定恢复系统初始的示范数据吗？')) return;
+
+    setHomeworkTasks(INITIAL_HOMEWORK_TASKS);
+    setSchedules(INITIAL_SCHEDULE_ITEMS);
+    setReviewItems(INITIAL_REVIEW_ITEMS);
+    setReviewBannerDismissed(false);
+    setMistakes(INITIAL_MISTAKE_ITEMS);
+    setIsDemoPurged(false);
+
+    try {
+      localStorage.removeItem(STORAGE_KEY_DEMO_PURGED);
+      localStorage.setItem(
+        STORAGE_KEY_HOMEWORK_TASKS,
+        JSON.stringify(INITIAL_HOMEWORK_TASKS)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_SCHEDULES,
+        JSON.stringify(INITIAL_SCHEDULE_ITEMS)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_REVIEW_ITEMS,
+        JSON.stringify(INITIAL_REVIEW_ITEMS)
+      );
+      localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, 'false');
+      localStorage.setItem(
+        STORAGE_KEY_MISTAKES,
+        JSON.stringify(INITIAL_MISTAKE_ITEMS)
+      );
+    } catch {}
+
+    syncToCloudD1({
+      homeworkTasks: INITIAL_HOMEWORK_TASKS,
+      schedules: INITIAL_SCHEDULE_ITEMS,
+      mistakes: INITIAL_MISTAKE_ITEMS,
+    });
+
+    showToast('已恢复系统示范数据 ✓');
   };
 
   const handleUpdateExamScores = (
@@ -704,9 +934,25 @@ export default function App() {
     setShowWelcomeAuthScreen(false);
     if (isNewRegistration) {
       setHomeworkTasks([]);
+      setSchedules([]);
+      setReviewItems([]);
+      setReviewBannerDismissed(true);
+      setMistakes([]);
+      setIsDemoPurged(true);
       try {
+        localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
         localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEY_REVIEW_ITEMS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, 'true');
+        localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify([]));
       } catch {}
+      syncToCloudD1({
+        homeworkTasks: [],
+        schedules: [],
+        mistakes: [],
+        purgeMockData: true,
+      });
     }
     showToast(
       isNewRegistration
@@ -1135,11 +1381,37 @@ export default function App() {
             {/* Active View Body */}
             {activeView === 'desk' ? (
               <div className="flex flex-col space-y-5 animate-fade-slide">
+                {/* 0. Demo Data Notice & Purge Banner */}
+                {!isDemoPurged &&
+                  (homeworkTasks.length > 0 ||
+                    schedules.length > 0 ||
+                    reviewItems.length > 0 ||
+                    mistakes.length > 0) && (
+                    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-primary-fixed/30 border border-primary-fixed/60 text-xs text-on-surface shadow-2xs">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-primary text-[18px] shrink-0">
+                          cleaning_services
+                        </span>
+                        <span className="truncate font-medium">
+                          当前书桌包含初始示范数据（示例作业与习惯日程）
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handlePurgeAllMockData}
+                        className="text-primary hover:text-on-primary-fixed font-bold hover:underline cursor-pointer shrink-0 ml-2 text-[11px] bg-white px-3 py-1 rounded-full border border-primary/25 shadow-2xs transition-colors"
+                      >
+                        一键清空示范数据
+                      </button>
+                    </div>
+                  )}
+
                 {/* 1. Conditional Top Review Banner (昨日作业小复盘) */}
                 <YesterdayReviewBanner
                   items={reviewItems}
                   isDismissed={reviewBannerDismissed}
                   onResolveItem={handleResolveReview}
+                  onDeleteItem={handleDeleteReviewItem}
                   onDismissAll={handleDismissAllReview}
                   onRestoreBanner={handleRestoreReview}
                   onShowToast={showToast}
@@ -1177,6 +1449,10 @@ export default function App() {
                 mistakes={mistakes}
                 onClearMistake={handleClearMistake}
                 onRestoreMistake={handleRestoreMistake}
+                onDeleteMistake={handleDeleteMistake}
+                onClearAllMistakes={handleClearAllMistakes}
+                onUpdateMistake={handleUpdateMistake}
+                onAddMistake={handleAddMistake}
                 examPeriod={examPeriod}
                 onSelectExamPeriod={setExamPeriod}
                 examScores={
@@ -1406,6 +1682,8 @@ export default function App() {
         onAddExtracurricularSchedule={handleAddSchedule}
         onSyncActivityAttendance={handleSyncActivityAttendance}
         onRenameSubject={handleRenameSubject}
+        onPurgeAllMockData={handlePurgeAllMockData}
+        onRestoreAllMockData={handleRestoreAllMockData}
         onShowToast={showToast}
       />
 

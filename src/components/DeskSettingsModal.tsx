@@ -35,6 +35,8 @@ interface DeskSettingsModalProps {
   ) => void;
   onRenameSubjectGlobal?: (oldName: SubjectName, newName: SubjectName) => void;
   onRenameSubject?: (oldName: SubjectName, newName: SubjectName) => void;
+  onPurgeAllMockData?: () => void;
+  onRestoreAllMockData?: () => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -91,6 +93,8 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   onSyncActivityAttendance,
   onRenameSubjectGlobal,
   onRenameSubject,
+  onPurgeAllMockData,
+  onRestoreAllMockData,
   onShowToast,
 }) => {
   // Top-level add form state for Extracurricular Hobby
@@ -1853,6 +1857,52 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* SECTION: 示范数据管理与纯净书桌 */}
+          {(onPurgeAllMockData || onRestoreAllMockData) && (
+            <div className="p-3.5 rounded-2xl bg-[#FFF8F3] border border-primary-fixed space-y-2">
+              <div className="flex items-center gap-1.5 text-primary">
+                <span className="material-symbols-outlined text-[18px]">
+                  cleaning_services
+                </span>
+                <h4 className="text-xs font-bold text-on-surface">
+                  示范数据管理 · 开启属于你的纯净书桌
+                </h4>
+              </div>
+              <p className="text-[11px] leading-relaxed text-on-surface-variant">
+                正式注册使用后，建议点击一键清空系统预设的初始示例作业、示例打卡日程、昨日复盘与示例错题，开启完全空白的个人书桌。您的学生姓名、班级和番茄钟时长等个性化配置将完整保留。
+              </p>
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                {onPurgeAllMockData && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onPurgeAllMockData();
+                      onClose();
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-error hover:bg-error/90 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      delete_sweep
+                    </span>
+                    <span>一键清空全部示范数据</span>
+                  </button>
+                )}
+                {onRestoreAllMockData && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRestoreAllMockData();
+                      onClose();
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-medium cursor-pointer transition-colors"
+                  >
+                    恢复预设示范数据
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
