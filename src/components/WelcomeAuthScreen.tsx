@@ -481,7 +481,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
               </div>
             </div>
 
-            {/* Quick One-Tap Role Demo Strip */}
+            {/* Quick One-Tap Demo Strip */}
             <div className="p-3.5 rounded-2xl bg-surface-container-low border border-[#EAE4DA] flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-secondary text-[20px]">
@@ -492,7 +492,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                     免输入快速体验通道：
                   </span>
                   <span className="text-on-surface-variant">
-                    直接以「{activePreset.studentName} · {activePreset.gradeClass}」数据快速进入书桌
+                    直接以「{activePreset.studentName} · {activePreset.gradeClass}」示范数据快速进入书桌
                   </span>
                 </div>
               </div>
@@ -500,16 +500,9 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => handleQuickDemoEnter('student')}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-primary-fixed text-primary border border-[#EAE4DA] text-xs font-bold cursor-pointer transition-colors"
+                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-primary-fixed text-primary border border-[#EAE4DA] text-xs font-bold cursor-pointer transition-colors"
                 >
-                  🧑‍🎓 学生身份体验
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoEnter('parent')}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-secondary-container text-secondary border border-[#EAE4DA] text-xs font-bold cursor-pointer transition-colors"
-                >
-                  👨‍👩‍👧 家长身份体验
+                  ⚡ 一键进入示范书桌
                 </button>
               </div>
             </div>
@@ -548,43 +541,6 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                 >
                   注册新家庭书桌
                 </button>
-              </div>
-
-              {/* Identity Role Selector */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-semibold text-on-surface-variant block">
-                  选择当前伴学身份：
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRole('student')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      role === 'student'
-                        ? 'bg-primary-fixed/40 border-primary text-primary'
-                        : 'bg-surface-container-low border-transparent text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      school
-                    </span>
-                    <span>学生本人使用</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole('parent')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      role === 'parent'
-                        ? 'bg-secondary-container/60 border-secondary text-secondary'
-                        : 'bg-surface-container-low border-transparent text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      supervisor_account
-                    </span>
-                    <span>家长静默伴学</span>
-                  </button>
-                </div>
               </div>
 
               {errorMessage && (

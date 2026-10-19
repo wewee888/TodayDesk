@@ -2,11 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_POMODORO_SECONDS,
+  buildDynamicWeeklyReport,
   buildSmartExamPeriods,
   calculateDeskSummary,
   calculatePomodoroProgress,
   clampTaskDuration,
   clearMistakeItem,
+  computeDynamicEfficiencyBubbles,
+  computeMistakeArchiveCounts,
+  extractOrderedSubjectsFromSegment,
   formatPomodoroTime,
   getDefaultSubjectsForGrade,
   getSubjectMeta,
@@ -271,4 +275,141 @@ test('getDefaultSubjectsForGrade accurately adapts default subjects to grade cur
   assert.ok(!grade9.includes('地理') && !grade9.includes('生物'), '初三默认结业地理生物');
 });
 
+test('parseTimetableContent preserves duplicate subjects in the same day, extracts morning reading, and transposes period-row tables without padding default subjects', () => {
+  // 1. Same-day duplicate subjects + morning reading + unpadded short day
+  const rawDaily = [
+    '周一：早读英语 数学 数学 语文 英语 物理 体育',
+    '周二：早读语文 语文 数学 英语',
+  ].join('\n');
+  const parsedDaily = parseTimetableContent(rawDaily, '测试课表.txt', 'grade8');
+  const monCol = parsedDaily.weeklyGrid.find((d) => d.day === '周一');
+  const tueCol = parsedDaily.weeklyGrid.find((d) => d.day === '周二');
+  const wedCol = parsedDaily.weeklyGrid.find((d) => d.day === '周三');
+
+  assert.equal(monCol?.morningReading, '英语');
+  assert.deepEqual(
+    monCol?.periods.map((p) => (typeof p === 'string' ? p : p.subject)),
+    ['数学', '数学', '语文', '英语', '物理', '体育锻炼']
+  );
+  assert.equal(tueCol?.morningReading, '语文');
+  assert.deepEqual(
+    tueCol?.periods.map((p) => (typeof p === 'string' ? p : p.subject)),
+    ['语文', '数学', '英语']
+  );
+  assert.equal(wedCol?.periods.length, 0);
+
+  // 2. Period-by-period rows across Mon-Fri columns
+  const rawPeriodTable = [
+    '周一 周二 周三 周四 周五',
+    '早读 语文 英语 语文 英语 语文',
+    '第1节 数学 语文 数学 英语 数学',
+    '第2节 数学 数学 语文 数学 语文',
+    '第3节 英语 物理 生物 历史 道法',
+  ].join('\n');
+  const parsedTable = parseTimetableContent(rawPeriodTable, '表格课表.txt', 'grade8');
+  const tableMon = parsedTable.weeklyGrid.find((d) => d.day === '周一');
+  const tableWed = parsedTable.weeklyGrid.find((d) => d.day === '周三');
+  assert.equal(tableMon?.morningReading, '语文');
+  assert.deepEqual(
+    tableMon?.periods.map((p) => (typeof p === 'string' ? p : p.subject)),
+    ['数学', '数学', '英语']
+  );
+  assert.equal(tableWed?.morningReading, '语文');
+  assert.deepEqual(
+    tableWed?.periods.map((p) => (typeof p === 'string' ? p : p.subject)),
+    ['数学', '语文', '生物']
+  );
+
+  // 3. Continuous unspaced subject extraction
+  const continuous = extractOrderedSubjectsFromSegment('数学数学语文英语道德与法治体育');
+  assert.deepEqual(
+    continuous.map((c) => c.subject),
+    ['数学', '数学', '语文', '英语', '道法', '体育锻炼']
+  );
+});
+
+test('computeMistakeArchiveCounts and computeDynamicEfficiencyBubbles respect isDemoPurged with zero residual offsets', () => {
+  const emptyCounts = computeMistakeArchiveCounts([], true);
+  assert.equal(emptyCounts.remainingMistakes, 0);
+  assert.equal(emptyCounts.clearedCount, 0);
+  assert.equal(emptyCounts.totalCount, 0);
+
+  const emptyBubbles = computeDynamicEfficiencyBubbles([], [], [], true);
+  assert.equal(emptyBubbles.length, 0);
+
+  const realBubbles = computeDynamicEfficiencyBubbles(
+    [
+      {
+        id: 't-real-1',
+        subject: '数学',
+        subjectBadgeClass: '',
+        taskType: '作业练习',
+        title: '数学精练',
+        estimatedMinutes: 60,
+        completed: true,
+      },
+    ],
+    [
+      {
+        subject: '数学',
+        icon: 'square_foot',
+        score: 114,
+        fullScore: 120,
+        trendText: '最新录入',
+        trendIcon: 'trending_up',
+        colorScheme: 'secondary',
+      },
+    ],
+    [],
+    true
+  );
+  assert.equal(realBubbles.length, 1);
+  assert.equal(realBubbles[0].subject, '数学');
+  assert.equal(realBubbles[0].scorePercent, 95);
+
+  const emptyReport = buildDynamicWeeklyReport({
+    studentName: '李子涵',
+    gradeClass: '初二 (3) 班',
+    tasks: [],
+    mistakes: [],
+    examScores: [],
+    isDemoPurged: true,
+    defaultReport: {
+      studentName: '李子涵',
+      weekLabel: '默认周报',
+      headline: '默认标题',
+      summaryParagraph: '默认总结',
+      highYieldSubject: '数学（月投入 14h · 得分率 93%）',
+      potentialSubject: '物理',
+      encouragement: '加油',
+      actionItems: [{ subject: '数学', task: '假任务', minutes: 15, priority: '必清' }],
+    },
+  });
+  assert.equal(emptyReport.actionItems.length, 0);
+  assert.ok(!emptyReport.highYieldSubject.includes('14h'));
+
+  const singleTaskReport = buildDynamicWeeklyReport({
+    studentName: '李子涵',
+    gradeClass: '初二 (3) 班',
+    tasks: [
+      {
+        id: 'task-henry-math-1',
+        subject: '数学',
+        subjectBadgeClass: '',
+        taskType: '作业练习',
+        title: '数学 · 作业练习专项',
+        estimatedMinutes: 22,
+        completed: false,
+      },
+    ],
+    mistakes: [],
+    examScores: [],
+    isDemoPurged: true,
+    defaultReport: emptyReport,
+  });
+  assert.ok(singleTaskReport.headline.includes('22 分钟'));
+  assert.ok(singleTaskReport.highYieldSubject.includes('22 分钟'));
+  assert.equal(singleTaskReport.actionItems.length, 1);
+  assert.equal(singleTaskReport.actionItems[0].minutes, 22);
+});
 

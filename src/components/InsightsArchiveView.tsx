@@ -10,9 +10,12 @@ import type {
 } from '../types/study';
 import { INITIAL_EFFICIENCY_BUBBLES } from '../data/initialData';
 import { MultiPeriodReportSection } from './MultiPeriodReportSection';
+import { DailyHomeworkPeLedgerSection } from './DailyHomeworkPeLedgerSection';
 import {
   type SchoolExamScheduleMode,
   buildSmartExamPeriods,
+  computeDynamicEfficiencyBubbles,
+  computeMistakeArchiveCounts,
   getDefaultSubjectsForGrade,
   getSubjectMeta,
   resolveRecommendedExamPeriod,
@@ -22,9 +25,16 @@ import { MistakeEditModal } from './MistakeEditModal';
 
 interface InsightsArchiveViewProps {
   tasks?: HomeworkTask[];
+  onAddTaskRecord?: (newTask: HomeworkTask) => void;
+  onUpdateTaskRecord?: (updatedTask: HomeworkTask) => void;
+  onDeleteTaskRecord?: (taskId: string) => void;
+  peExercises?: string[];
+  extracurricularActivities?: string[];
   mistakes: MistakeItem[];
   gradeClass?: string;
   isDemoPurged?: boolean;
+  familyReflectionNote?: string;
+  onUpdateReflectionNote?: (note: string) => void;
   onClearMistake: (id: string) => void;
   onRestoreMistake: (id: string) => void;
   onDeleteMistake?: (id: string) => void;
@@ -76,9 +86,16 @@ const EXTRA_EXAM_SUBJECTS = [
 
 export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   tasks = [],
+  onAddTaskRecord,
+  onUpdateTaskRecord,
+  onDeleteTaskRecord,
+  peExercises,
+  extracurricularActivities,
   mistakes,
   gradeClass,
   isDemoPurged,
+  familyReflectionNote,
+  onUpdateReflectionNote,
   onClearMistake,
   onRestoreMistake,
   onDeleteMistake,
@@ -115,6 +132,14 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   const [imageFallbackMap, setImageFallbackMap] = useState<
     Record<string, boolean>
   >({});
+  const [confirmClearAllMistakes, setConfirmClearAllMistakes] = useState(false);
+  const [confirmDeleteMistakeId, setConfirmDeleteMistakeId] = useState<
+    string | null
+  >(null);
+  const [isEditingReflection, setIsEditingReflection] = useState(false);
+  const [reflectionDraft, setReflectionDraft] = useState(
+    familyReflectionNote || ''
+  );
 
   // Dynamic Exam Periods state (supports auto monthly exam, skipping straight to 期中考试/期末考试, or including 期中预备)
   const [examPeriods, setExamPeriods] =
@@ -133,8 +158,16 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   const [newExamSubjectScore, setNewExamSubjectScore] = useState('92');
   const [newExamSubjectFull, setNewExamSubjectFull] = useState('100');
 
-  const remainingMistakes = mistakes.filter((m) => !m.cleared).length;
-  const clearedCount = 5 + mistakes.filter((m) => m.cleared).length;
+  const { remainingMistakes, clearedCount } = computeMistakeArchiveCounts(
+    mistakes,
+    Boolean(isDemoPurged)
+  );
+  const efficiencyBubbles = computeDynamicEfficiencyBubbles(
+    tasks,
+    examScores,
+    INITIAL_EFFICIENCY_BUBBLES,
+    Boolean(isDemoPurged)
+  );
 
   const handleApplySmartExamRule = (
     month: number,
@@ -285,25 +318,39 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               <span>录入错题</span>
             </button>
             {onClearAllMistakes && mistakes.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      '确定要清空全部错题记录吗？清空后您可以录入属于您自己的真实错题。'
-                    )
-                  ) {
-                    onClearAllMistakes();
-                  }
-                }}
-                className="flex items-center gap-1 text-[11px] text-outline hover:text-error cursor-pointer transition-colors px-2 py-0.5 rounded-full hover:bg-error-container/20"
-                title="一键清空所有错题"
-              >
-                <span className="material-symbols-outlined text-[13px]">
-                  delete_sweep
-                </span>
-                <span>清空错题</span>
-              </button>
+              confirmClearAllMistakes ? (
+                <div className="inline-flex items-center gap-1 bg-error-container/30 px-2 py-0.5 rounded-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClearAllMistakes();
+                      setConfirmClearAllMistakes(false);
+                    }}
+                    className="text-[11px] font-bold text-error cursor-pointer px-1"
+                  >
+                    确认清空
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearAllMistakes(false)}
+                    className="text-[11px] text-outline cursor-pointer px-1"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearAllMistakes(true)}
+                  className="flex items-center gap-1 text-[11px] text-outline hover:text-error cursor-pointer transition-colors px-2 py-0.5 rounded-full hover:bg-error-container/20"
+                  title="一键清空所有错题"
+                >
+                  <span className="material-symbols-outlined text-[13px]">
+                    delete_sweep
+                  </span>
+                  <span>清空错题</span>
+                </button>
+              )
             )}
             <button
               type="button"
@@ -400,16 +447,27 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                           aria-label={`删除错题 ${item.title}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`确定删除错题「${item.title}」吗？`)) {
+                            if (confirmDeleteMistakeId === item.id) {
                               onDeleteMistake(item.id);
+                              setConfirmDeleteMistakeId(null);
+                            } else {
+                              setConfirmDeleteMistakeId(item.id);
                             }
                           }}
-                          className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                          className={`rounded-full flex items-center justify-center cursor-pointer transition-colors ${
+                            confirmDeleteMistakeId === item.id
+                              ? 'px-1.5 py-0.5 bg-error text-on-error text-[10px] font-bold'
+                              : 'w-5 h-5 hover:bg-error-container/40 text-outline hover:text-error'
+                          }`}
                           title="彻底删除此错题"
                         >
-                          <span className="material-symbols-outlined text-[13px]">
-                            delete
-                          </span>
+                          {confirmDeleteMistakeId === item.id ? (
+                            <span>删?</span>
+                          ) : (
+                            <span className="material-symbols-outlined text-[13px]">
+                              delete
+                            </span>
+                          )}
                         </button>
                       )}
                     </div>
@@ -1159,7 +1217,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                     className="-ml-1.5 w-5 h-5 rounded-full bg-error-container text-on-error-container text-[11px] font-bold flex items-center justify-center cursor-pointer shadow-2xs"
                     title={`移除 ${period}`}
                   >
-                    ✕
+                    <span className="material-symbols-outlined text-[13px]">close</span>
                   </button>
                 )}
               </div>
@@ -1271,12 +1329,32 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         )}
       </section>
 
+      {/* SECTION 2.2: 每日完成的作业与体育打卡 · 按日期记录明细表（支持补录漏记与修改错记） */}
+      <DailyHomeworkPeLedgerSection
+        tasks={tasks}
+        gradeClass={gradeClass}
+        customSubjects={customSubjects}
+        peExercises={peExercises}
+        extracurricularActivities={extracurricularActivities}
+        onAddTaskRecord={(newTask) => {
+          if (onAddTaskRecord) onAddTaskRecord(newTask);
+        }}
+        onUpdateTaskRecord={(updatedTask) => {
+          if (onUpdateTaskRecord) onUpdateTaskRecord(updatedTask);
+        }}
+        onDeleteTaskRecord={(taskId) => {
+          if (onDeleteTaskRecord) onDeleteTaskRecord(taskId);
+        }}
+        onShowToast={onShowToast}
+      />
+
       {/* SECTION 2.5: 作业与成绩 · 周视图 / 月视图 / 季视图 / 年视图 & 综合学情报表 */}
       <MultiPeriodReportSection
         tasks={tasks}
         examScores={examScores}
+        mistakes={mistakes}
         gradeClass={gradeClass}
-        isDemoPurged={isDemoPurged || examScores.length === 0}
+        isDemoPurged={isDemoPurged}
         customSubjects={customSubjects}
         onShowToast={onShowToast}
       />
@@ -1301,7 +1379,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </div>
 
         {/* Tactile Visual Efficiency Map / Bubbles */}
-        {isDemoPurged || examScores.length === 0 ? (
+        {efficiencyBubbles.length === 0 ? (
           <div className="w-full h-44 rounded-2xl bg-surface-container-low p-4 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-[#EAE4DA]">
             <span className="material-symbols-outlined text-[28px] text-outline">query_stats</span>
             <div className="text-xs font-bold text-on-surface">学情效能罗盘待生成</div>
@@ -1318,7 +1396,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               <div className="w-full border-t border-dashed border-outline-variant" />
             </div>
 
-            {INITIAL_EFFICIENCY_BUBBLES.map((b) => {
+            {efficiencyBubbles.map((b) => {
               const isSelected = selectedBubble?.id === b.id;
               const circleClass =
                 b.colorScheme === 'primary'
@@ -1396,20 +1474,66 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               psychology
             </span>
           </div>
-          <div className="flex flex-col space-y-0.5 flex-1">
+          <div className="flex flex-col space-y-1.5 flex-1">
             <div className="flex items-center justify-between gap-1.5">
               <span className="text-[12px] font-bold text-on-surface">
                 家庭学情小结 · 亲子复盘便签
               </span>
-              <span className="text-[11px] text-on-surface-variant">
-                本周自评与记录
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setReflectionDraft(familyReflectionNote || '');
+                  setIsEditingReflection((prev) => !prev);
+                }}
+                className="text-[11px] text-primary hover:underline font-semibold cursor-pointer flex items-center gap-0.5"
+              >
+                <span className="material-symbols-outlined text-[13px]">
+                  edit
+                </span>
+                <span>{isEditingReflection ? '收起' : '编辑便签'}</span>
+              </button>
             </div>
-            <p className="text-[13px] text-on-surface-variant leading-relaxed">
-              {isDemoPurged || examScores.length === 0
-                ? '“欢迎使用今日书桌成长档案！录入各次小测、月考与期中/期末考分，配合每日作业与体育锻炼打卡，此处将智能提炼家庭学情便签与亲子复盘建议。”'
-                : '“本月数学压轴题突破明显，平时错题回填坚持得非常棒！每晚坚持 20 分钟中考体育跳绳与体能打卡，周末重点把物理受力分析与透镜成像的 2 道错题吃透，象棋、钢琴与小号练习继续保持节奏。”'}
-            </p>
+            {isEditingReflection ? (
+              <div className="space-y-2">
+                <textarea
+                  rows={2}
+                  value={reflectionDraft}
+                  onChange={(e) => setReflectionDraft(e.target.value)}
+                  placeholder="记录本周孩子的学习亮点、习惯进步或下周小目标..."
+                  className="w-full rounded-xl bg-white p-2.5 text-xs text-on-surface border border-[#EAE4DA] focus:outline-none focus:border-primary"
+                />
+                <div className="flex justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingReflection(false)}
+                    className="px-3 py-1 rounded-full bg-white text-on-surface-variant text-[11px] font-semibold border border-[#EAE4DA] cursor-pointer"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onUpdateReflectionNote) {
+                        onUpdateReflectionNote(reflectionDraft.trim());
+                      }
+                      setIsEditingReflection(false);
+                      onShowToast('已保存家庭学情小结 ✓');
+                    }}
+                    className="px-3.5 py-1 rounded-full bg-primary text-on-primary text-[11px] font-semibold cursor-pointer"
+                  >
+                    保存便签 ✓
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[13px] text-on-surface-variant leading-relaxed">
+                {familyReflectionNote
+                  ? `“${familyReflectionNote}”`
+                  : isDemoPurged || (examScores.length === 0 && tasks.length === 0)
+                  ? '“欢迎使用今日书桌成长档案！录入各次小测、月考与期中/期末考分，配合每日作业与体育锻炼打卡，点击右上角「编辑便签」即可记录专属亲子复盘建议。”'
+                  : '“本月数学压轴题突破明显，平时错题回填坚持得非常棒！每晚坚持 20 分钟中考体育跳绳与体能打卡，周末重点把物理受力分析与透镜成像的 2 道错题吃透，象棋、钢琴与小号练习继续保持节奏。”'}
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -1499,14 +1623,8 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                       type="button"
                       aria-label="删除此错题"
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            `确定要彻底删除错题「${activeMistakeDetail.title}」吗？`
-                          )
-                        ) {
-                          onDeleteMistake(activeMistakeDetail.id);
-                          setActiveMistakeDetail(null);
-                        }
+                        onDeleteMistake(activeMistakeDetail.id);
+                        setActiveMistakeDetail(null);
                       }}
                       className="w-8 h-8 rounded-full hover:bg-error-container text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
                       title="彻底删除此错题"
@@ -1523,7 +1641,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                     onClick={() => setActiveMistakeDetail(null)}
                     className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
                   >
-                    ✕
+                    <span className="material-symbols-outlined text-[18px]">close</span>
                   </button>
                 </div>
               </div>
@@ -1640,7 +1758,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                     onClick={() => setShowAllMistakesModal(false)}
                     className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant cursor-pointer"
                   >
-                    ✕
+                    <span className="material-symbols-outlined text-[18px]">close</span>
                   </button>
                 </div>
               </div>
@@ -1713,11 +1831,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                         {onDeleteMistake && (
                           <button
                             type="button"
-                            onClick={() => {
-                              if (window.confirm(`确定删除错题「${m.title}」吗？`)) {
-                                onDeleteMistake(m.id);
-                              }
-                            }}
+                            onClick={() => onDeleteMistake(m.id)}
                             className="w-7 h-7 rounded-full hover:bg-error-container text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
                             title="删除该错题"
                           >

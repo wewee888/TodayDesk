@@ -259,50 +259,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   return (
     <section aria-label="今日待攻克" className="space-y-3">
-      {/* 1. Parent Companion Dashboard (家长静默伴学视角专属) */}
-      {role === 'parent' && (
-        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/90 to-orange-50/90 border border-amber-200/80 shadow-xs space-y-2.5 animate-fade-slide">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[20px]">
-                family_restroom
-              </span>
-              <span className="text-xs font-bold text-on-surface">
-                家长静默伴学看板 · 看清学情不催不吼
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold text-primary">
-              已完成 {summary.completedCount} / {summary.totalCount} 项 ({progressPercent}%)
-            </span>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="w-full h-2 rounded-full bg-surface-container overflow-hidden">
-            <div
-              className="h-full bg-secondary transition-all duration-300 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-2 flex-wrap text-xs pt-0.5">
-            <span className="text-[11px] text-on-surface-variant">
-              💡 按当前节奏，预计今晚 <strong className="text-primary font-bold">{estFinishHour}:{estFinishMinute}</strong> 全部完成
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowCheerModal(true)}
-                className="px-2.5 py-1 rounded-full bg-primary text-on-primary text-[11px] font-semibold hover:bg-primary-container transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
-              >
-                <span className="material-symbols-outlined text-[13px]">favorite</span>
-                <span>发送暖心鼓励便签</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Warm Parent Cheer Sticky Note (爸爸妈妈的鼓励便签) */}
+      {/* Warm Parent Cheer Sticky Note (家庭鼓励便签) */}
       {parentCheerNote && (
         <div className="p-3 rounded-2xl bg-amber-50/95 border border-amber-200/90 flex items-start justify-between gap-2.5 shadow-2xs animate-fade-slide">
           <div className="flex items-start gap-2 min-w-0">
@@ -427,15 +384,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
           {onClearAllTasks && tasks.length > 0 && (
             <button
               type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    '确定清空当前书桌上的模拟/全部任务吗？清空后您可以录入属于您自己的真实作业。'
-                  )
-                ) {
-                  onClearAllTasks();
-                }
-              }}
+              onClick={() => onClearAllTasks()}
               className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-outline hover:text-error bg-surface-container-low hover:bg-error-container/20 border border-outline-variant/40 transition-colors cursor-pointer"
               title="一键清空模拟任务，设置自己的任务"
             >
@@ -580,11 +529,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                       <span className="text-outline/50 text-xs">·</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(`确定删除任务「${task.title}」吗？`)) {
-                            onDeleteTask(task.id);
-                          }
-                        }}
+                        onClick={() => onDeleteTask(task.id)}
                         className="text-xs text-outline hover:text-error font-medium inline-flex items-center gap-0.5 cursor-pointer transition-colors shrink-0"
                         title="删除该任务"
                       >

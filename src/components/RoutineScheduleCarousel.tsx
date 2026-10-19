@@ -148,9 +148,7 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
                   aria-label={`删除日程 ${item.title}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`确定删除日程「${item.title}」吗？`)) {
-                      onDeleteSchedule(item.id);
-                    }
+                    onDeleteSchedule(item.id);
                   }}
                   className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
                   title="删除该日程"

@@ -176,6 +176,17 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   );
   const [renameSubjectVal, setRenameSubjectVal] = useState('');
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const allAvailableSubjects: SubjectName[] = Array.from(
@@ -1103,7 +1114,7 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
                 <span className="material-symbols-outlined text-[14px]">
                   {showAddHobbyPanel ? 'expand_less' : 'add'}
                 </span>
-                <span>{showAddHobbyPanel ? '收起新增' : '+ 新增项目'}</span>
+                <span>{showAddHobbyPanel ? '收起新增' : '新增项目'}</span>
               </button>
             </div>
 
@@ -1453,7 +1464,7 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
                 <span className="material-symbols-outlined text-[14px]">
                   {showAddPePanel ? 'expand_less' : 'add'}
                 </span>
-                <span>{showAddPePanel ? '收起新增' : '+ 新增体育项'}</span>
+                <span>{showAddPePanel ? '收起新增' : '新增体育项'}</span>
               </button>
             </div>
 

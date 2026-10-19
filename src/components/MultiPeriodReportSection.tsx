@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import type { ExamScoreCard, HomeworkTask, SubjectName } from '../types/study';
+import type {
+  ExamScoreCard,
+  HomeworkTask,
+  MistakeItem,
+  SubjectName,
+} from '../types/study';
 import { getDefaultSubjectsForGrade, getSubjectBadgeClass } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
@@ -8,6 +13,7 @@ export type TimeDimension = 'week' | 'month' | 'quarter' | 'year';
 interface MultiPeriodReportSectionProps {
   tasks: HomeworkTask[];
   examScores: ExamScoreCard[];
+  mistakes?: MistakeItem[];
   gradeClass?: string;
   isDemoPurged?: boolean;
   customSubjects?: SubjectName[];
@@ -372,6 +378,7 @@ export const MultiPeriodReportSection: React.FC<
 > = ({
   tasks,
   examScores,
+  mistakes = [],
   gradeClass,
   isDemoPurged,
   customSubjects = [],
@@ -433,14 +440,17 @@ export const MultiPeriodReportSection: React.FC<
     );
   };
 
-  // Compute dynamic rows for the selected time dimension
+  // Compute dynamic rows for the selected time dimension (zeroing out demo baseline when isDemoPurged is true)
   const subjectRows: SubjectReportRow[] = allSubjectItems.map((item) => {
-    const liveTaskMinutes = tasks
-      .filter((t) => t.subject === item.subject)
-      .reduce((sum, t) => sum + t.estimatedMinutes, 0);
-    const liveAllCorrectTasks = tasks.filter(
-      (t) => t.subject === item.subject && t.isAllCorrect
-    ).length;
+    const liveSubjTasks = tasks.filter((t) => t.subject === item.subject);
+    const liveTaskMinutes = liveSubjTasks.reduce(
+      (sum, t) => sum + (t.actualMinutes ?? t.estimatedMinutes),
+      0
+    );
+    const liveCompletedCount = liveSubjTasks.filter((t) => t.completed).length;
+    const liveAllCorrectTasks = liveSubjTasks.filter((t) => t.isAllCorrect).length;
+    const manualExtra = extraAllCorrectMap[item.subject] || 0;
+
     const liveScoreCard = examScores.find((c) => c.subject === item.subject);
     const hasLiveScore = Boolean(liveScoreCard);
 
@@ -450,45 +460,58 @@ export const MultiPeriodReportSection: React.FC<
       : item.defaultFullScore;
     const scorePercent = hasLiveScore
       ? Math.min(100, Math.round((score / Math.max(fullScore, 1)) * 100))
-      : 0;
+      : isDemoPurged
+      ? 0
+      : Math.min(
+          100,
+          Math.round((item.defaultScore / Math.max(item.defaultFullScore, 1)) * 100)
+        );
 
-    const periodMinutes =
-      item.weeklyMinutes * meta.multiplier + liveTaskMinutes;
-    const totalTasks =
-      item.weeklyTasks * meta.multiplier +
-      (extraAllCorrectMap[item.subject] || 0);
-    const completedTasks = Math.max(
-      1,
-      Math.round(totalTasks * (dimension === 'week' ? 0.94 : 0.96))
-    );
+    const periodMinutes = isDemoPurged
+      ? liveTaskMinutes
+      : item.weeklyMinutes * meta.multiplier + liveTaskMinutes;
 
-    const allCorrectTimes = Math.min(
-      totalTasks,
-      item.weeklyAllCorrect * meta.multiplier +
-        liveAllCorrectTasks +
-        (extraAllCorrectMap[item.subject] || 0)
-    );
-    const allCorrectRate = Math.min(
-      100,
-      Math.round((allCorrectTimes / Math.max(totalTasks, 1)) * 100)
-    );
+    const totalTasks = isDemoPurged
+      ? liveSubjTasks.length + manualExtra
+      : item.weeklyTasks * meta.multiplier + manualExtra;
+
+    const completedTasks = isDemoPurged
+      ? liveCompletedCount + manualExtra
+      : Math.max(
+          1,
+          Math.round(totalTasks * (dimension === 'week' ? 0.94 : 0.96))
+        );
+
+    const allCorrectTimes = isDemoPurged
+      ? Math.min(totalTasks, liveAllCorrectTasks + manualExtra)
+      : Math.min(
+          totalTasks,
+          item.weeklyAllCorrect * meta.multiplier +
+            liveAllCorrectTasks +
+            manualExtra
+        );
+
+    const allCorrectRate =
+      totalTasks > 0
+        ? Math.min(100, Math.round((allCorrectTimes / totalTasks) * 100))
+        : 0;
 
     let statusBadge = '稳扎稳打';
     let statusColorClass = 'bg-primary-fixed/60 text-primary';
-    if (scorePercent >= 93 || allCorrectRate >= 85) {
+    if (!hasLiveScore && isDemoPurged && totalTasks === 0) {
+      statusBadge = '待录入';
+      statusColorClass = 'bg-surface-container text-on-surface-variant';
+    } else if (scorePercent >= 93 || (totalTasks > 0 && allCorrectRate >= 85)) {
       statusBadge = '🌟 高效领跑';
       statusColorClass = 'bg-secondary-container text-on-secondary-container';
     } else if (hasLiveScore && scorePercent < 88) {
       statusBadge = '⚡ 提分空间';
       statusColorClass = 'bg-tertiary-fixed/70 text-tertiary';
-    } else if (!hasLiveScore && (isDemoPurged || examScores.length === 0)) {
-      statusBadge = '待录入';
-      statusColorClass = 'bg-surface-container text-on-surface-variant';
     }
 
     const scoreText = hasLiveScore
       ? `${score}/${fullScore}`
-      : isDemoPurged || examScores.length === 0
+      : isDemoPurged
       ? '待录入'
       : `${item.defaultScore}/${item.defaultFullScore}`;
 
@@ -504,8 +527,10 @@ export const MultiPeriodReportSection: React.FC<
       scorePercent,
       trendNote:
         liveScoreCard?.trendText ||
-        (isDemoPurged || examScores.length === 0
-          ? '考分待录入 · 录入后呈现趋势'
+        (isDemoPurged
+          ? totalTasks > 0
+            ? `已累计 ${periodMinutes} 分钟 · 完成 ${completedTasks}/${totalTasks} 项`
+            : '考分与作业待录入 · 录入后自动生成趋势'
           : item.trendNote),
       statusBadge,
       statusColorClass,
@@ -522,13 +547,19 @@ export const MultiPeriodReportSection: React.FC<
 
   // 2. Standalone PE Exercise time (中考体育独立统计)
   const peRow = subjectRows.find((r) => r.category === 'pe');
-  const peStandaloneMinutes = peRow ? peRow.homeworkMinutes : 105 * meta.multiplier;
+  const peStandaloneMinutes = peRow
+    ? peRow.homeworkMinutes
+    : isDemoPurged
+    ? 0
+    : 105 * meta.multiplier;
   const peStandaloneHours = (peStandaloneMinutes / 60).toFixed(1);
 
   // 3. Standalone Extracurricular Hobby time (课余兴趣班独立统计)
   const hobbyRow = subjectRows.find((r) => r.category === 'hobby');
   const hobbyStandaloneMinutes = hobbyRow
     ? hobbyRow.homeworkMinutes
+    : isDemoPurged
+    ? 0
     : 165 * meta.multiplier;
   const hobbyStandaloneHours = (hobbyStandaloneMinutes / 60).toFixed(1);
 
@@ -541,19 +572,56 @@ export const MultiPeriodReportSection: React.FC<
     (sum, r) => sum + r.totalTasks,
     0
   );
-  const overallAllCorrectRate = Math.min(
-    100,
-    Math.round((totalAllCorrectTimes / Math.max(totalAcademicTasks, 1)) * 100)
+  const totalAcademicCompleted = academicRows.reduce(
+    (sum, r) => sum + r.completedTasks,
+    0
   );
+  const academicCompletionRate =
+    totalAcademicTasks > 0
+      ? Math.round((totalAcademicCompleted / totalAcademicTasks) * 100)
+      : isDemoPurged
+      ? 0
+      : 95;
+  const overallAllCorrectRate =
+    totalAcademicTasks > 0
+      ? Math.min(100, Math.round((totalAllCorrectTimes / totalAcademicTasks) * 100))
+      : 0;
   const mathRow = academicRows.find((r) => r.subject === '数学');
 
-  const avgScorePercent = Math.round(
-    subjectRows.reduce((sum, r) => sum + r.scorePercent, 0) /
-      Math.max(subjectRows.length, 1)
-  );
+  const scoredAcademicRows = subjectRows.filter((r) => r.scorePercent > 0);
+  const avgScorePercent =
+    scoredAcademicRows.length > 0
+      ? Math.round(
+          scoredAcademicRows.reduce((sum, r) => sum + r.scorePercent, 0) /
+            scoredAcademicRows.length
+        )
+      : 0;
+
+  const clearedMistakesTotal = isDemoPurged
+    ? mistakes.filter((m) => m.cleared).length
+    : meta.clearedMistakes + mistakes.filter((m) => m.cleared).length;
+
+  const pomodoroTotal = isDemoPurged
+    ? tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0)
+    : meta.pomodoroCount +
+      tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0);
+
+  const effectiveTrendPoints: TrendBarPoint[] = isDemoPurged
+    ? meta.trendPoints.map((pt, idx) => {
+        const isCurrentBucket = idx === meta.trendPoints.length - 1;
+        return {
+          label: pt.label,
+          studyMinutes: isCurrentBucket ? academicMinutes : 0,
+          peMinutes: isCurrentBucket ? peStandaloneMinutes : 0,
+          hobbyMinutes: isCurrentBucket ? hobbyStandaloneMinutes : 0,
+          allCorrectSubjCount: isCurrentBucket ? totalAllCorrectTimes : 0,
+          scoreRate: isCurrentBucket ? avgScorePercent : 0,
+        };
+      })
+    : meta.trendPoints;
 
   const maxBarMinutes = Math.max(
-    ...meta.trendPoints.map(
+    ...effectiveTrendPoints.map(
       (p) => p.studyMinutes + p.peMinutes + p.hobbyMinutes
     ),
     1
@@ -760,7 +828,7 @@ export const MultiPeriodReportSection: React.FC<
             </span>
           </div>
           <span className="text-[11px] text-secondary font-semibold block">
-            语数英物化历地生道法纯作业累计 · 完成率 95%
+            语数英物化历地生道法纯作业累计 · 完成率 {academicCompletionRate}%
           </span>
         </div>
 
@@ -783,8 +851,8 @@ export const MultiPeriodReportSection: React.FC<
             </span>
           </div>
           <span className="text-[11px] text-on-surface-variant block">
-            其中数学全对 {mathRow?.allCorrectTimes ?? 6}/{mathRow?.totalTasks ?? 7} 次（全对率{' '}
-            {mathRow?.allCorrectRate ?? 86}%）
+            其中数学全对 {mathRow?.allCorrectTimes ?? 0}/{mathRow?.totalTasks ?? 0} 次（全对率{' '}
+            {mathRow?.allCorrectRate ?? 0}%）
           </span>
         </div>
 
@@ -850,7 +918,7 @@ export const MultiPeriodReportSection: React.FC<
               {avgScorePercent}%
             </span>
             <span className="text-xs text-secondary font-bold">
-              较上周期 {meta.scoreDelta}
+              {avgScorePercent > 0 ? `较上周期 ${meta.scoreDelta}` : '录入考分后自动计算'}
             </span>
           </div>
           <span className="text-[11px] text-on-surface-variant block">
@@ -865,10 +933,10 @@ export const MultiPeriodReportSection: React.FC<
           </span>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-xl font-bold text-on-surface tabular-nums">
-              {meta.clearedMistakes}
+              {clearedMistakesTotal}
             </span>
             <span className="text-xs text-on-surface-variant">
-              道错题已销项 · 🍅 {meta.pomodoroCount} 个番茄钟
+              道错题已销项 · 🍅 {pomodoroTotal} 个番茄钟
             </span>
           </div>
           <span className="text-[11px] text-primary font-semibold block">
@@ -906,25 +974,31 @@ export const MultiPeriodReportSection: React.FC<
 
           <div
             className={`grid gap-2 pt-2 items-end ${
-              meta.trendPoints.length === 7
+              effectiveTrendPoints.length === 7
                 ? 'grid-cols-7'
-                : meta.trendPoints.length === 4
+                : effectiveTrendPoints.length === 4
                 ? 'grid-cols-4'
                 : 'grid-cols-3'
             }`}
           >
-            {meta.trendPoints.map((pt) => {
-              const studyH = Math.max(
-                14,
-                Math.round((pt.studyMinutes / maxBarMinutes) * 84)
-              );
-              const peH = Math.max(
-                6,
-                Math.round((pt.peMinutes / maxBarMinutes) * 84)
-              );
+            {effectiveTrendPoints.map((pt) => {
+              const studyH =
+                pt.studyMinutes > 0
+                  ? Math.max(
+                      12,
+                      Math.round((pt.studyMinutes / maxBarMinutes) * 84)
+                    )
+                  : 3;
+              const peH =
+                pt.peMinutes > 0
+                  ? Math.max(6, Math.round((pt.peMinutes / maxBarMinutes) * 84))
+                  : 3;
               const hobbyH =
                 pt.hobbyMinutes > 0
-                  ? Math.max(8, Math.round((pt.hobbyMinutes / maxBarMinutes) * 84))
+                  ? Math.max(
+                      8,
+                      Math.round((pt.hobbyMinutes / maxBarMinutes) * 84)
+                    )
                   : 2;
 
               return (

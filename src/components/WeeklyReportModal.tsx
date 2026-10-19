@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { SubjectName, WeeklyReportAI } from '../types/study';
 
 interface WeeklyReportModalProps {
@@ -24,6 +24,17 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   onAddActionToDesk,
 }) => {
   const [addedIndices, setAddedIndices] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -59,9 +70,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             type="button"
             aria-label="关闭周报弹窗"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+            className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer shrink-0"
           >
-            ✕
+            <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
 
@@ -102,51 +113,62 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 📋 周末 45 分钟靶向清账清单（点击可排入今日书桌）
               </span>
             </div>
-            <div className="space-y-2">
-              {report.actionItems.map((item, idx) => {
-                const isAdded = addedIndices[idx];
-                return (
-                  <div
-                    key={`${item.subject}-${idx}`}
-                    className="p-3 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] flex items-center justify-between gap-2.5 shadow-2xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-[10px] font-bold">
-                          {item.subject}
-                        </span>
-                        <span className="text-[10px] font-semibold text-primary">
-                          {item.priority} · {item.minutes}m
-                        </span>
-                      </div>
-                      <p className="text-xs font-medium text-on-surface mt-1">
-                        {item.task}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isAdded}
-                      onClick={() => {
-                        onAddActionToDesk(
-                          item.subject as SubjectName,
-                          '错题订正',
-                          item.minutes,
-                          item.task
-                        );
-                        setAddedIndices((prev) => ({ ...prev, [idx]: true }));
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold shrink-0 transition-all cursor-pointer ${
-                        isAdded
-                          ? 'bg-secondary-container text-on-secondary-container'
-                          : 'bg-primary-container text-on-primary hover:bg-primary'
-                      }`}
+            {report.actionItems.length === 0 ? (
+              <div className="p-4 rounded-2xl bg-surface-container-lowest border border-dashed border-[#EAE4DA] text-center space-y-1">
+                <div className="text-xs font-bold text-secondary">
+                  🎉 当前暂无待清账错题或积压任务
+                </div>
+                <p className="text-[11px] text-on-surface-variant">
+                  在「今日书桌」录入真实作业或收录错题后，这里会自动生成针对性的周末微清账清单。
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {report.actionItems.map((item, idx) => {
+                  const isAdded = addedIndices[idx];
+                  return (
+                    <div
+                      key={`${item.subject}-${idx}`}
+                      className="p-3 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] flex items-center justify-between gap-2.5 shadow-2xs"
                     >
-                      {isAdded ? '已排入书桌 ✓' : '+ 排入书桌'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-[10px] font-bold">
+                            {item.subject}
+                          </span>
+                          <span className="text-[10px] font-semibold text-primary">
+                            {item.priority} · {item.minutes}m
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-on-surface mt-1">
+                          {item.task}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isAdded}
+                        onClick={() => {
+                          onAddActionToDesk(
+                            item.subject as SubjectName,
+                            '错题订正',
+                            item.minutes,
+                            item.task
+                          );
+                          setAddedIndices((prev) => ({ ...prev, [idx]: true }));
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold shrink-0 transition-all cursor-pointer ${
+                          isAdded
+                            ? 'bg-secondary-container text-on-secondary-container'
+                            : 'bg-primary-container text-on-primary hover:bg-primary'
+                        }`}
+                      >
+                        {isAdded ? '已排入书桌 ✓' : '+ 排入书桌'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Encouragement Footer Note */}
