@@ -61,10 +61,12 @@ export interface HomeworkTask {
   taskType: string;
   title: string;
   estimatedMinutes: number;
+  actualMinutes?: number;
   completed: boolean;
   completedPomodoros?: number;
   isAllCorrect?: boolean;
   accuracyNote?: string;
+  taskDate?: string;
 }
 
 export interface MistakeItem {
@@ -89,10 +91,22 @@ export interface MistakeItem {
 
 export type ExamPeriod = string;
 
+export interface TimetablePeriodDetail {
+  periodIndex: number;
+  periodName?: string;
+  timeRange?: string;
+  subject: SubjectName;
+  teacher?: string;
+  isExtracurricular?: boolean;
+  isPE?: boolean;
+  note?: string;
+}
+
 export interface TimetableDaySchedule {
-  day: '周一' | '周二' | '周三' | '周四' | '周五';
+  day: '周一' | '周二' | '周三' | '周四' | '周五' | '周六' | '周日' | string;
+  dayName?: string;
   morningReading?: string;
-  periods: string[];
+  periods: (string | TimetablePeriodDetail)[];
 }
 
 export interface TimetableRecognitionResult {

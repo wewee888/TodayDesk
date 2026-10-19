@@ -16,6 +16,10 @@ interface TodayHomeworkListProps {
   gradeClass?: string;
   pomodoroMinutes?: number;
   customSubjects?: SubjectName[];
+  role?: 'student' | 'parent';
+  parentCheerNote?: string | null;
+  onSendParentCheer?: (note: string) => void;
+  onClearParentCheer?: () => void;
   onToggleTaskComplete: (id: string) => void;
   onSelectDuration: (id: string, minutes: number) => void;
   onUpdateTask?: (updated: HomeworkTask) => void;
@@ -68,6 +72,10 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   gradeClass,
   pomodoroMinutes = 25,
   customSubjects = [],
+  role = 'student',
+  parentCheerNote,
+  onSendParentCheer,
+  onClearParentCheer,
   onToggleTaskComplete,
   onSelectDuration,
   onUpdateTask,
@@ -87,6 +95,11 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     totalPomodoroSeconds
   );
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [expandedDurationTaskId, setExpandedDurationTaskId] = useState<string | null>(null);
+
+  // Parent Cheer Note state
+  const [showCheerModal, setShowCheerModal] = useState<boolean>(false);
+  const [cheerInputText, setCheerInputText] = useState<string>('');
 
   // Inline full task editor state (subject, taskType, title, custom minutes)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -94,10 +107,17 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   const [editTaskType, setEditTaskType] = useState<string>('');
   const [editTitle, setEditTitle] = useState<string>('');
   const [editMinutes, setEditMinutes] = useState<string>('30');
+  const [editActualMinutes, setEditActualMinutes] = useState<string>('30');
 
   const availableSubjects = Array.from(
     new Set([...getDefaultSubjectsForGrade(gradeClass), ...customSubjects])
   );
+
+  // Calculate estimated finish time for Parent Companion View
+  const now = new Date();
+  const estFinishTime = new Date(now.getTime() + summary.remainingMinutes * 60 * 1000);
+  const estFinishHour = String(estFinishTime.getHours()).padStart(2, '0');
+  const estFinishMinute = String(estFinishTime.getMinutes()).padStart(2, '0');
 
   useEffect(() => {
     if (!isRunning) {
@@ -161,6 +181,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     setEditTaskType(task.taskType);
     setEditTitle(task.title);
     setEditMinutes(String(task.estimatedMinutes));
+    setEditActualMinutes(String(task.actualMinutes ?? task.estimatedMinutes));
   };
 
   const handleSaveTaskEditor = (task: HomeworkTask) => {
@@ -168,6 +189,10 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     const clampedMins = clampTaskDuration(
       Number.isNaN(parsedMins) ? task.estimatedMinutes : parsedMins
     );
+    const parsedActual = parseInt(editActualMinutes, 10);
+    const clampedActual = Number.isNaN(parsedActual)
+      ? undefined
+      : clampTaskDuration(parsedActual);
     const nextSubject = editSubject.trim() || task.subject;
     const updated: HomeworkTask = {
       ...task,
@@ -176,6 +201,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
       taskType: editTaskType.trim() || task.taskType,
       title: editTitle.trim() || task.title,
       estimatedMinutes: clampedMins,
+      actualMinutes: clampedActual,
     };
     if (onUpdateTask) {
       onUpdateTask(updated);
@@ -192,12 +218,27 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
       t.subject !== '课余兴趣'
   ).length;
 
+  const handleToggleTaskCheck = (task: HomeworkTask) => {
+    const nextCompleted = !task.completed;
+    if (nextCompleted && task.actualMinutes === undefined) {
+      const updated: HomeworkTask = {
+        ...task,
+        completed: true,
+        actualMinutes: task.estimatedMinutes,
+      };
+      if (onUpdateTask) {
+        onUpdateTask(updated);
+      }
+    }
+    onToggleTaskComplete(task.id);
+  };
+
   const handleToggleAllCorrect = (task: HomeworkTask) => {
     const nextState = !task.isAllCorrect;
     const updated: HomeworkTask = {
       ...task,
       isAllCorrect: nextState,
-      accuracyNote: nextState ? '已登老师每日全对名单' : undefined,
+      accuracyNote: nextState ? '自批/家长核对无误' : undefined,
     };
     if (onUpdateTask) {
       onUpdateTask(updated);
@@ -205,14 +246,158 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     if (onShowToast) {
       onShowToast(
         nextState
-          ? `🏆 已记载「${task.subject}」作业全对！登上老师全对名单 ✨`
-          : `已取消「${task.subject}」全对标记`
+          ? `✓ 已标记「${task.subject}」当晚自批/核对无误`
+          : `已取消「${task.subject}」自批标记`
       );
     }
   };
 
   return (
     <section aria-label="今日待攻克" className="space-y-3">
+      {/* 1. Parent Companion Dashboard (家长静默伴学视角专属) */}
+      {role === 'parent' && (
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/90 to-orange-50/90 border border-amber-200/80 shadow-xs space-y-2.5 animate-fade-slide">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">
+                family_restroom
+              </span>
+              <span className="text-xs font-bold text-on-surface">
+                家长静默伴学看板 · 看清学情不催不吼
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-primary">
+              已完成 {summary.completedCount} / {summary.totalCount} 项 ({summary.progressPercent}%)
+            </span>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full h-2 rounded-full bg-surface-container overflow-hidden">
+            <div
+              className="h-full bg-secondary transition-all duration-300 rounded-full"
+              style={{ width: `${summary.progressPercent}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-2 flex-wrap text-xs pt-0.5">
+            <span className="text-[11px] text-on-surface-variant">
+              💡 按当前节奏，预计今晚 <strong className="text-primary font-bold">{estFinishHour}:{estFinishMinute}</strong> 全部完成
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowCheerModal(true)}
+                className="px-2.5 py-1 rounded-full bg-primary text-on-primary text-[11px] font-semibold hover:bg-primary-container transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+              >
+                <span className="material-symbols-outlined text-[13px]">favorite</span>
+                <span>发送暖心鼓励便签</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Warm Parent Cheer Sticky Note (爸爸妈妈的鼓励便签) */}
+      {parentCheerNote && (
+        <div className="p-3 rounded-2xl bg-amber-50/95 border border-amber-200/90 flex items-start justify-between gap-2.5 shadow-2xs animate-fade-slide">
+          <div className="flex items-start gap-2 min-w-0">
+            <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">
+              push_pin
+            </span>
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-[11px] font-bold text-primary block">
+                📌 家长的暖心便签
+              </span>
+              <p className="text-xs font-semibold text-on-surface leading-relaxed break-words">
+                “{parentCheerNote}”
+              </p>
+            </div>
+          </div>
+          {onClearParentCheer && (
+            <button
+              type="button"
+              onClick={onClearParentCheer}
+              className="px-2.5 py-1 rounded-full bg-white hover:bg-amber-100 text-primary text-[11px] font-bold border border-amber-200 cursor-pointer shrink-0 transition-colors whitespace-nowrap active:scale-95"
+              title="孩子已收到并温和互动"
+            >
+              收到 ❤️
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 3. Modal: Parent Sending Cheer Sticky Note */}
+      {showCheerModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#FDFBF7] rounded-3xl max-w-sm w-full p-4.5 border border-[#EAE4DA] shadow-2xl space-y-3 animate-fade-slide">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-sm text-on-surface">
+                <span className="material-symbols-outlined text-primary text-[18px]">favorite</span>
+                <span>给孩子留一张暖心便签</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCheerModal(false)}
+                className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant cursor-pointer hover:text-on-surface"
+              >
+                <span className="material-symbols-outlined text-[15px]">close</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-on-surface-variant leading-relaxed">
+              便签将温馨显示在孩子今日书桌上方。不催不吼，用具体的看见和关怀支持孩子的自律心流。
+            </p>
+            {/* Quick cheer presets */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                '今天数学压轴题思路太棒了，加油！🎉',
+                '洗好水果在桌上，歇5分钟再战 🍓',
+                '今晚专注度超赞，写完早点洗漱休息 🌙',
+                '做完这门作业，我们一起下楼散步10分钟 🏃',
+              ].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setCheerInputText(preset)}
+                  className="text-[11px] px-2 py-1 rounded-lg bg-surface-container text-on-surface hover:bg-primary-fixed/50 text-left transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              value={cheerInputText}
+              onChange={(e) => setCheerInputText(e.target.value)}
+              placeholder="输入给孩子的鼓励便签..."
+              className="w-full bg-white rounded-xl p-2.5 text-xs text-on-surface border border-[#EAE4DA] focus:outline-none focus:border-primary"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCheerModal(false)}
+                className="px-3.5 py-1.5 rounded-full bg-surface-container text-xs font-semibold text-on-surface-variant cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (cheerInputText.trim() && onSendParentCheer) {
+                    onSendParentCheer(cheerInputText.trim());
+                    if (onShowToast) onShowToast('💌 暖心便签已粘贴到孩子书桌！');
+                  }
+                  setShowCheerModal(false);
+                }}
+                className="px-4 py-1.5 rounded-full bg-primary text-on-primary text-xs font-bold cursor-pointer hover:bg-primary-container shadow-2xs"
+              >
+                粘贴便签 ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Section Header */}
       <div className="flex items-center justify-between px-0.5 flex-wrap gap-2">
         <div className="flex items-center gap-1.5">
           <span className="material-symbols-outlined text-primary text-[20px]">
@@ -325,6 +510,28 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
             ? calculatePomodoroProgress(remainingSeconds, totalPomodoroSeconds)
             : 0;
 
+          const actualMins = task.actualMinutes ?? (task.completed ? task.estimatedMinutes : undefined);
+          let timeDiffBadge: { text: string; colorClass: string } | null = null;
+          if (task.completed && actualMins !== undefined) {
+            const diff = actualMins - task.estimatedMinutes;
+            if (diff < 0) {
+              timeDiffBadge = {
+                text: `⚡ 提前 ${Math.abs(diff)}m`,
+                colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+              };
+            } else if (diff === 0) {
+              timeDiffBadge = {
+                text: `🎯 分秒不差 ${actualMins}m`,
+                colorClass: 'bg-blue-50 text-blue-700 border-blue-200',
+              };
+            } else {
+              timeDiffBadge = {
+                text: `⏱️ 超时 +${diff}m`,
+                colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+              };
+            }
+          }
+
           return (
             <div
               key={task.id}
@@ -418,7 +625,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                   <button
                     type="button"
                     aria-label={`完成 ${task.title}`}
-                    onClick={() => onToggleTaskComplete(task.id)}
+                    onClick={() => handleToggleTaskCheck(task)}
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer shrink-0 ${
                       task.completed
                         ? 'bg-secondary text-on-secondary shadow-xs'
@@ -432,7 +639,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                 </div>
               </div>
 
-              {/* ROW 2: Full-Width Title & All-Correct Honor Roll Toggle (Never squeezed by right buttons!) */}
+              {/* ROW 2: Full-Width Title & Actual Time Status Badge (Never squeezed by right buttons!) */}
               <div className="flex items-start justify-between gap-2 pt-0.5">
                 <h3
                   className={`text-[15px] sm:text-[16px] leading-[22px] font-bold tracking-tight flex-1 ${
@@ -444,21 +651,28 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                   {task.title}
                 </h3>
 
-                {isAcademicHomework && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleAllCorrect(task)}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0 active:scale-95 ${
-                      task.isAllCorrect
-                        ? 'bg-secondary text-on-secondary shadow-2xs animate-scale-pop'
-                        : 'bg-surface-container-low hover:bg-secondary-container text-on-surface-variant hover:text-on-secondary-container border border-[#EAE4DA]'
-                    }`}
-                    title="记载该科作业是否全对（如数学老师每天公布的全对作业名单）"
-                  >
-                    <span>
-                      {task.isAllCorrect ? '🏆 全对登榜 ✓' : '🏆 记全对'}
-                    </span>
-                  </button>
+                {task.completed && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {timeDiffBadge && (
+                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${timeDiffBadge.colorClass}`}>
+                        {timeDiffBadge.text}
+                      </span>
+                    )}
+                    {isAcademicHomework && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAllCorrect(task)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                          task.isAllCorrect
+                            ? 'bg-secondary text-on-secondary border-secondary shadow-2xs'
+                            : 'bg-surface-container-low text-on-surface-variant hover:text-secondary border-[#EAE4DA]'
+                        }`}
+                        title="当晚自批客观题无误（第二天老师批改全对请在明日复盘登榜）"
+                      >
+                        {task.isAllCorrect ? '✓ 自批无误' : '自批无误?'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -517,7 +731,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                     <label className="flex flex-col gap-1">
                       <span className="text-[11px] text-on-surface-variant font-medium">
                         自定义学科名称：
@@ -544,7 +758,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-[11px] text-on-surface-variant font-medium">
-                        耗时(分钟，支持5~240m)：
+                        预计耗时(分)：
                       </span>
                       <input
                         type="number"
@@ -553,6 +767,20 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                         value={editMinutes}
                         onChange={(e) => setEditMinutes(e.target.value)}
                         className="bg-white rounded-lg px-2.5 py-1.5 text-xs font-bold text-primary border border-outline-variant/60 focus:outline-none focus:border-primary"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] text-on-surface-variant font-medium">
+                        实际用时(分)：
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={300}
+                        value={editActualMinutes}
+                        onChange={(e) => setEditActualMinutes(e.target.value)}
+                        placeholder="实际完成分钟"
+                        className="bg-white rounded-lg px-2.5 py-1.5 text-xs font-bold text-secondary border border-outline-variant/60 focus:outline-none focus:border-secondary"
                       />
                     </label>
                   </div>
@@ -710,7 +938,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                 </div>
               )}
 
-              {/* ROW 3: Clean Two-Line Duration Selector (No Orphan Button Wrapping!) */}
+              {/* ROW 3: Compact Single-Line Duration Chip (Click 调档 to expand, saving 35% height!) */}
               <div className="bg-surface-container/60 p-2 rounded-xl flex flex-col gap-1.5">
                 {/* Top sub-row: Current duration on left, +5m/+15m and Custom on right */}
                 <div className="flex items-center justify-between gap-2">
@@ -729,6 +957,11 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                         {task.estimatedMinutes} 分钟
                       </strong>
                     </span>
+                    {task.completed && task.actualMinutes !== undefined && (
+                      <span className="text-[11px] text-on-surface-variant/80 ml-1">
+                        · 实际 {task.actualMinutes}m
+                      </span>
+                    )}
                   </button>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -747,38 +980,62 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                           )
                         )
                       }
-                      className="px-2 py-0.5 rounded-md bg-white hover:bg-primary-fixed/60 text-primary text-[11px] font-bold border border-[#EAE4DA] transition-all cursor-pointer whitespace-nowrap"
+                      className="px-2 py-0.5 rounded-md bg-white hover:bg-primary-fixed/60 text-primary text-[11px] font-bold border border-[#EAE4DA] transition-all cursor-pointer whitespace-nowrap active:scale-95"
                       title="每次累加时长"
                     >
-                      +{isPeTask ? 5 : 15}分钟
+                      +{isPeTask ? 5 : 15}m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedDurationTaskId((prev) =>
+                          prev === task.id ? null : task.id
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-md bg-white hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[11px] font-semibold border border-[#EAE4DA] transition-all cursor-pointer flex items-center gap-0.5 whitespace-nowrap active:scale-95"
+                      title="展开或收起快捷时长档位选择"
+                    >
+                      <span>
+                        {expandedDurationTaskId === task.id ? '收起' : '调档'}
+                      </span>
+                      <span className="material-symbols-outlined text-[13px]">
+                        {expandedDurationTaskId === task.id
+                          ? 'expand_less'
+                          : 'expand_more'}
+                      </span>
                     </button>
                   </div>
                 </div>
 
-                {/* Bottom sub-row: Single-row evenly spaced duration grid (never wraps onto orphan line!) */}
-                <div
-                  className={`grid gap-1 ${
-                    isPeTask ? 'grid-cols-7' : 'grid-cols-6'
-                  }`}
-                >
-                  {cardDurationPresets.map((mins) => {
-                    const isActive = task.estimatedMinutes === mins;
-                    return (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => onSelectDuration(task.id, mins)}
-                        className={`py-1 rounded-lg text-[11px] font-semibold text-center transition-all cursor-pointer whitespace-nowrap ${
-                          isActive
-                            ? 'bg-primary text-on-primary shadow-xs font-bold'
-                            : 'bg-white/75 text-on-surface-variant hover:text-on-surface hover:bg-white'
-                        }`}
-                      >
-                        {mins}m
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Bottom sub-row: Only expands when expandedDurationTaskId === task.id, saving ~35% height */}
+                {expandedDurationTaskId === task.id && (
+                  <div
+                    className={`grid gap-1 pt-1.5 border-t border-[#EAE4DA]/60 animate-fade-slide ${
+                      isPeTask ? 'grid-cols-7' : 'grid-cols-6'
+                    }`}
+                  >
+                    {cardDurationPresets.map((mins) => {
+                      const isActive = task.estimatedMinutes === mins;
+                      return (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => {
+                            onSelectDuration(task.id, mins);
+                            setExpandedDurationTaskId(null);
+                          }}
+                          className={`py-1 rounded-lg text-[11px] font-semibold text-center transition-all cursor-pointer whitespace-nowrap ${
+                            isActive
+                              ? 'bg-primary text-on-primary shadow-xs font-bold'
+                              : 'bg-white/75 text-on-surface-variant hover:text-on-surface hover:bg-white'
+                          }`}
+                        >
+                          {mins}m
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           );

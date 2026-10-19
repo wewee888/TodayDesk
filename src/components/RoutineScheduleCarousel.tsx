@@ -13,6 +13,7 @@ import { useDragScroll } from '../utils/useDragScroll';
 
 interface RoutineScheduleCarouselProps {
   schedules: ScheduleItem[];
+  weekdayName?: string;
   onToggleSchedule: (id: string) => void;
   onUpdateSchedule?: (updated: ScheduleItem) => void;
   onDeleteSchedule?: (id: string) => void;
@@ -48,13 +49,14 @@ const FLEXIBLE_TIME_PRESETS = [
 
 export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = ({
   schedules,
+  weekdayName = '周三',
   onToggleSchedule,
   onUpdateSchedule,
   onDeleteSchedule,
   onAddScheduleClick,
 }) => {
-  const { dragProps, isDragging } = useDragScroll<HTMLDivElement>();
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
+  const [showWeekendSchedules, setShowWeekendSchedules] = useState(false);
   const [badgeText, setBadgeText] = useState('');
   const [scheduleType, setScheduleType] =
     useState<ScheduleFrequencyType>('weekly_fixed');
@@ -64,6 +66,168 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
   const [attendanceStatus, setAttendanceStatus] =
     useState<AttendanceStatus>('active');
   const [leaveNote, setLeaveNote] = useState('');
+
+  // Distinguish today's routines from weekend / non-today routines
+  const isWeekendNow = weekdayName === '周六' || weekdayName === '周日';
+  const isWeekendSchedule = (item: ScheduleItem) => {
+    const t = item.timeText;
+    return t.includes('周六') || t.includes('周日') || t.includes('周末');
+  };
+
+  const todaySchedules = schedules.filter((s) => {
+    if (isWeekendNow) {
+      return (
+        isWeekendSchedule(s) ||
+        s.timeText.includes('每晚') ||
+        s.timeText.includes('每日') ||
+        s.timeText.includes('机动')
+      );
+    }
+    return !isWeekendSchedule(s);
+  });
+
+  const weekendSchedules = schedules.filter((s) => {
+    if (isWeekendNow) {
+      return (
+        !isWeekendSchedule(s) &&
+        !s.timeText.includes('每晚') &&
+        !s.timeText.includes('每日')
+      );
+    }
+    return isWeekendSchedule(s);
+  });
+
+  const renderCard = (item: ScheduleItem) => {
+    const attendanceMeta = getAttendanceStatusMeta(
+      item.attendanceStatus,
+      item.leaveNote
+    );
+    const freqBadge = getScheduleFrequencyBadge(
+      item.scheduleType,
+      item.timeText
+    );
+
+    return (
+      <div
+        key={item.id}
+        className={`bg-surface-container-lowest/90 backdrop-blur-md rounded-2xl p-3 shadow-xs border flex flex-col justify-between transition-all ${
+          attendanceMeta.isOnLeaveOrPaused
+            ? 'border-[#F3D9B1] bg-[#FFFDF9]/95'
+            : item.completed
+            ? 'opacity-65 bg-surface-container-low/70 border-[#EAE4DA]/70'
+            : 'border-[#EAE4DA]/70 hover:border-primary/40'
+        }`}
+      >
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-1">
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold truncate ${item.badgeClass}`}
+            >
+              {item.badgeText}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[10px] text-on-surface-variant font-medium">
+                {freqBadge.isFlexible ? '机动' : item.timeText}
+              </span>
+              {onUpdateSchedule && (
+                <button
+                  type="button"
+                  aria-label={`修改日程 ${item.title}`}
+                  onClick={() => handleOpenEdit(item)}
+                  className="w-5 h-5 rounded-full hover:bg-surface-container text-outline hover:text-primary flex items-center justify-center cursor-pointer transition-colors"
+                  title="修改时间/请假/暂停"
+                >
+                  <span className="material-symbols-outlined text-[13px]">
+                    edit
+                  </span>
+                </button>
+              )}
+              {onDeleteSchedule && (
+                <button
+                  type="button"
+                  aria-label={`删除日程 ${item.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`确定删除日程「${item.title}」吗？`)) {
+                      onDeleteSchedule(item.id);
+                    }
+                  }}
+                  className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
+                  title="删除该日程"
+                >
+                  <span className="material-symbols-outlined text-[13px]">
+                    delete
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <p
+              className={`text-[13px] leading-[18px] font-semibold line-clamp-1 ${
+                attendanceMeta.isOnLeaveOrPaused
+                  ? 'text-on-surface-variant line-through decoration-dotted'
+                  : item.completed
+                  ? 'line-through text-outline'
+                  : 'text-on-surface'
+              }`}
+            >
+              {item.title}
+            </p>
+          </div>
+
+          {attendanceMeta.isOnLeaveOrPaused ? (
+            <p className="text-[11px] leading-[16px] text-[#B25E00] font-medium line-clamp-1">
+              {attendanceMeta.label} · {attendanceMeta.defaultNote}
+            </p>
+          ) : (
+            <p className="text-[11px] leading-[16px] text-on-surface-variant line-clamp-1">
+              {item.subtitle}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-2 pt-1 border-t border-[#EAE4DA]/40 flex items-center justify-between gap-1">
+          {attendanceMeta.isOnLeaveOrPaused ? (
+            <button
+              type="button"
+              onClick={() => handleQuickRestore(item)}
+              className="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-semibold cursor-pointer"
+            >
+              恢复正常上课
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onUpdateSchedule && handleOpenEdit(item)}
+                className="px-2 py-0.5 rounded-full bg-surface-container hover:bg-[#FFF3E0] text-[10px] text-on-surface-variant hover:text-[#B25E00] font-medium cursor-pointer"
+              >
+                请假/暂停
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            aria-label={`完成打卡 ${item.title}`}
+            onClick={() => onToggleSchedule(item.id)}
+            className={`h-7 px-3 rounded-full flex items-center gap-1 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer select-none ${
+              item.completed
+                ? 'bg-secondary text-on-secondary shadow-2xs'
+                : 'bg-secondary-container text-on-secondary-container hover:bg-secondary hover:text-on-secondary'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[14px]">
+              {item.completed ? 'verified' : 'check'}
+            </span>
+            <span>{item.completed ? '已打卡 ✓' : '打卡'}</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const handleOpenEdit = (item: ScheduleItem) => {
     setEditingItem(item);
@@ -112,179 +276,58 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
   };
 
   return (
-    <section aria-label="固定日程与预习" className="space-y-2">
+    <section aria-label="固定习惯与日程" className="space-y-2.5">
       <div className="flex items-center justify-between px-0.5">
         <div className="flex items-center gap-1.5">
           <span className="material-symbols-outlined text-secondary text-[18px]">
             calendar_clock
           </span>
-          <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">
-            固定/机动日程与预习
+          <h2 className="text-[16px] sm:text-[17px] leading-[22px] font-semibold text-on-surface">
+            今日固定自律习惯与体锻 ({weekdayName})
           </h2>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-on-surface-variant font-medium">
-            共 {schedules.length} 项
+            今晚 {todaySchedules.length} 项
           </span>
           <button
             type="button"
             onClick={onAddScheduleClick}
-            className="px-2.5 py-0.5 rounded-full bg-secondary-container/70 text-on-secondary-container text-[11px] font-semibold hover:bg-secondary-container cursor-pointer"
+            className="px-2.5 py-0.5 rounded-full bg-secondary-container/70 text-on-secondary-container text-[11px] font-semibold hover:bg-secondary-container cursor-pointer transition-colors"
           >
-            + 新增日程
+            + 新增习惯
           </button>
         </div>
       </div>
 
-      <div
-        {...dragProps}
-        className={`flex gap-2.5 overflow-x-auto pb-1 no-scrollbar -mx-1 px-1 select-none ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab snap-x'
-        }`}
-      >
-        {schedules.map((item) => {
-          const attendanceMeta = getAttendanceStatusMeta(
-            item.attendanceStatus,
-            item.leaveNote
-          );
-          const freqBadge = getScheduleFrequencyBadge(
-            item.scheduleType,
-            item.timeText
-          );
-
-          return (
-            <div
-              key={item.id}
-              className={`snap-start shrink-0 w-60 bg-surface-container-lowest/90 backdrop-blur-md rounded-2xl p-3 shadow-xs border flex flex-col justify-between transition-all ${
-                attendanceMeta.isOnLeaveOrPaused
-                  ? 'border-[#F3D9B1] bg-[#FFFDF9]/95'
-                  : item.completed
-                  ? 'opacity-65 bg-surface-container-low/70 border-[#EAE4DA]/70'
-                  : 'border-[#EAE4DA]/70'
-              }`}
-            >
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-1">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold truncate ${item.badgeClass}`}
-                  >
-                    {item.badgeText}
-                  </span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] text-on-surface-variant font-medium">
-                      {freqBadge.isFlexible ? '机动' : item.timeText}
-                    </span>
-                    {onUpdateSchedule && (
-                      <button
-                        type="button"
-                        aria-label={`修改日程 ${item.title}`}
-                        onClick={() => handleOpenEdit(item)}
-                        className="w-5 h-5 rounded-full hover:bg-surface-container text-outline hover:text-primary flex items-center justify-center cursor-pointer transition-colors"
-                        title="修改时间/请假/暂停"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">
-                          edit
-                        </span>
-                      </button>
-                    )}
-                    {onDeleteSchedule && (
-                      <button
-                        type="button"
-                        aria-label={`删除日程 ${item.title}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`确定删除日程「${item.title}」吗？`)) {
-                            onDeleteSchedule(item.id);
-                          }
-                        }}
-                        className="w-5 h-5 rounded-full hover:bg-error-container/40 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors"
-                        title="删除该日程"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">
-                          delete
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <p
-                    className={`text-[14px] leading-[20px] font-semibold line-clamp-1 ${
-                      attendanceMeta.isOnLeaveOrPaused
-                        ? 'text-on-surface-variant line-through decoration-dotted'
-                        : item.completed
-                        ? 'line-through text-outline'
-                        : 'text-on-surface'
-                    }`}
-                  >
-                    {item.title}
-                  </p>
-                </div>
-
-                {attendanceMeta.isOnLeaveOrPaused ? (
-                  <p className="text-[11px] leading-[16px] text-[#B25E00] font-medium line-clamp-1">
-                    {attendanceMeta.label} · {attendanceMeta.defaultNote}
-                  </p>
-                ) : (
-                  <p className="text-[12px] leading-[18px] text-on-surface-variant line-clamp-1">
-                    {item.subtitle}
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-2.5 flex items-center justify-between gap-1">
-                {attendanceMeta.isOnLeaveOrPaused ? (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickRestore(item)}
-                    className="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container text-[11px] font-semibold cursor-pointer"
-                  >
-                    恢复正常上课
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onUpdateSchedule && handleOpenEdit(item)}
-                      className="px-2 py-0.5 rounded-full bg-surface-container hover:bg-[#FFF3E0] text-[10px] text-on-surface-variant hover:text-[#B25E00] font-medium cursor-pointer"
-                    >
-                      请假/改期
-                    </button>
-                    {item.completed && (
-                      <span className="text-[10px] text-secondary font-semibold">
-                        已打卡 ✓
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  aria-label={`打卡 ${item.title}`}
-                  disabled={attendanceMeta.isOnLeaveOrPaused}
-                  onClick={() => onToggleSchedule(item.id)}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-all cursor-pointer shrink-0 ${
-                    attendanceMeta.isOnLeaveOrPaused
-                      ? 'bg-surface-container-low text-outline/50 cursor-not-allowed'
-                      : item.completed
-                      ? 'bg-secondary text-on-secondary shadow-xs'
-                      : 'bg-surface-container text-on-surface-variant hover:text-secondary'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {attendanceMeta.isOnLeaveOrPaused
-                      ? 'pause_circle'
-                      : item.completed
-                      ? 'check_circle'
-                      : 'radio_button_unchecked'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      {/* 2x2 Grid or 1-col on mobile - ZERO Horizontal Cutoff! */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {todaySchedules.map(renderCard)}
       </div>
+
+      {/* Collapsible section for Weekend & other non-today habits */}
+      {weekendSchedules.length > 0 && (
+        <div className="pt-0.5">
+          <button
+            type="button"
+            onClick={() => setShowWeekendSchedules((prev) => !prev)}
+            className="text-[11px] font-semibold text-on-surface-variant hover:text-primary flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <span className="material-symbols-outlined text-[15px]">
+              {showWeekendSchedules ? 'expand_less' : 'expand_more'}
+            </span>
+            <span>
+              周末特长与课余活动 ({weekendSchedules.length} 项) ·{' '}
+              {showWeekendSchedules ? '收起' : '展开查看'}
+            </span>
+          </button>
+          {showWeekendSchedules && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 animate-fade-slide">
+              {weekendSchedules.map(renderCard)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Edit Schedule / Leave & Pause Modal */}
       {editingItem &&

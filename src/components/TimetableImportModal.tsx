@@ -1,5 +1,9 @@
 import React, { useRef, useState } from 'react';
-import type { SubjectName, TimetableRecognitionResult } from '../types/study';
+import type {
+  ScheduleItem,
+  SubjectName,
+  TimetableRecognitionResult,
+} from '../types/study';
 import {
   getSubjectBadgeClass,
   parseTimetableContent,
@@ -16,12 +20,26 @@ interface TimetableImportModalProps {
     generateTodayPreviewTasks: boolean
   ) => void;
   onShowToast: (msg: string) => void;
+  gradeClass?: string;
+  studentName?: string;
+  schedules?: ScheduleItem[];
 }
 
 const PRESET_TIMETABLE_TEXTS: Record<
-  'grade7' | 'grade8' | 'grade9',
+  'zongbei7' | 'grade7' | 'grade8' | 'grade9',
   { label: string; desc: string; text: string }
 > = {
+  zongbei7: {
+    label: '成都市棕北中学 七.6班实测课表',
+    desc: '真实初一课表 · 语数英生历地道法 + 书法/心理/体锻/素质选修',
+    text:
+      '成都市棕北中学 初2026届7年级6班课程表\n' +
+      '周一：语文、数学、英语、生物、地理、书法、体育\n' +
+      '周二：数学、语文、英语、历史、心理健康、音乐、体育\n' +
+      '周三：英语、数学、语文、道德与法治、生物、美术、素质选修\n' +
+      '周四：语文、英语、数学、地理、历史、信息科技、体育\n' +
+      '周五：数学、语文、英语、道德与法治、劳动实践、体锻、班会',
+  },
   grade7: {
     label: '初一标准课表 (7门文化课)',
     desc: '语数英 + 历地生道法 + 体育/信息/美音',
@@ -44,13 +62,16 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   onClose,
   onApplyTimetableResult,
   onShowToast,
+  gradeClass,
+  studentName,
+  schedules,
 }) => {
   const [gradePreset, setGradePreset] = useState<
-    'grade7' | 'grade8' | 'grade9'
-  >('grade8');
-  const [rawText, setRawText] = useState(PRESET_TIMETABLE_TEXTS.grade8.text);
+    'zongbei7' | 'grade7' | 'grade8' | 'grade9'
+  >('zongbei7');
+  const [rawText, setRawText] = useState(PRESET_TIMETABLE_TEXTS.zongbei7.text);
   const [uploadedFileName, setUploadedFileName] = useState<string>(
-    '初二(3)班_秋季学期课程表.png'
+    '成都市棕北中学_七.6班_课表.png'
   );
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -58,9 +79,9 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   const [recognitionResult, setRecognitionResult] =
     useState<TimetableRecognitionResult>(() =>
       parseTimetableContent(
-        PRESET_TIMETABLE_TEXTS.grade8.text,
-        '初二(3)班_秋季学期课程表.png',
-        'grade8'
+        PRESET_TIMETABLE_TEXTS.zongbei7.text,
+        '成都市棕北中学_七.6班_课表.png',
+        'grade7'
       )
     );
 
@@ -68,15 +89,16 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectName[]>(
     () =>
       parseTimetableContent(
-        PRESET_TIMETABLE_TEXTS.grade8.text,
-        '初二(3)班_秋季学期课程表.png',
-        'grade8'
+        PRESET_TIMETABLE_TEXTS.zongbei7.text,
+        '成都市棕北中学_七.6班_课表.png',
+        'grade7'
       ).detectedSubjects
   );
   const [customSubjectInput, setCustomSubjectInput] = useState('');
   const [syncToExamSubjects, setSyncToExamSubjects] = useState(true);
   const [generateTodayPreviewTasks, setGenerateTodayPreviewTasks] =
     useState(true);
+  const [includeFixedHabitsInPrint, setIncludeFixedHabitsInPrint] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { dragProps: gridDragProps, isDragging: isDraggingGrid } =
@@ -87,12 +109,13 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   const runSmartRecognition = async (
     textToParse: string,
     fileName: string,
-    preset: 'grade7' | 'grade8' | 'grade9',
+    preset: 'zongbei7' | 'grade7' | 'grade8' | 'grade9',
     imageBase64?: string,
     mimeType?: string
   ) => {
     setIsScanning(true);
-    const localImmediate = parseTimetableContent(textToParse, fileName, preset);
+    const gradeLevel = preset === 'zongbei7' ? 'grade7' : preset;
+    const localImmediate = parseTimetableContent(textToParse, fileName, gradeLevel);
     setRecognitionResult(localImmediate);
     setSelectedSubjects(localImmediate.detectedSubjects);
 
@@ -103,7 +126,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
         body: JSON.stringify({
           text: textToParse,
           sourceName: fileName,
-          gradePreset: preset,
+          gradePreset: gradeLevel,
           imageBase64,
           mimeType,
         }),
@@ -124,7 +147,9 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     }
   };
 
-  const handleSelectGradePreset = (preset: 'grade7' | 'grade8' | 'grade9') => {
+  const handleSelectGradePreset = (
+    preset: 'zongbei7' | 'grade7' | 'grade8' | 'grade9'
+  ) => {
     setGradePreset(preset);
     const presetMeta = PRESET_TIMETABLE_TEXTS[preset];
     setRawText(presetMeta.text);
@@ -133,6 +158,123 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     setPreviewImageUrl(null);
     runSmartRecognition(presetMeta.text, fileName, preset);
     onShowToast(`已载入「${presetMeta.label}」并自动识别本学期全部学科 ✨`);
+  };
+
+  const handlePrintTimetable = () => {
+    const printRoot = document.getElementById('todaydesk-printable-root');
+    if (!printRoot) {
+      window.print();
+      return;
+    }
+
+    const schoolTitle =
+      recognitionResult.schoolAndClass ||
+      `${gradeClass || '初一(6)班'} 课程与作息总表`;
+
+    const dayCols = recognitionResult.weeklyGrid;
+    const maxPeriods = Math.max(...dayCols.map((d) => d.periods.length), 7);
+
+    const periodTimes = [
+      '08:00 - 08:45',
+      '08:55 - 09:40',
+      '10:10 - 10:55',
+      '11:05 - 11:50',
+      '14:00 - 14:45',
+      '14:55 - 15:40',
+      '15:50 - 16:35',
+      '16:45 - 17:30',
+    ];
+
+    let rowsHtml = '';
+    for (let pIdx = 0; pIdx < maxPeriods; pIdx++) {
+      if (pIdx === 2) {
+        rowsHtml += `
+          <tr style="background:#f3f4f6; font-weight:bold; font-size:11px;">
+            <td style="border:1px solid #333; padding:4px;">09:40 - 10:10</td>
+            <td colspan="5" style="border:1px solid #333; padding:4px; text-align:center;">🏃 阳光大课间跑操 / 室内眼保健操</td>
+            <td style="border:1px solid #333; padding:4px; text-align:center;">周末晨练</td>
+          </tr>
+        `;
+      }
+      if (pIdx === 4) {
+        rowsHtml += `
+          <tr style="background:#f9fafb; font-weight:bold; font-size:11px;">
+            <td style="border:1px solid #333; padding:4px;">11:50 - 14:00</td>
+            <td colspan="5" style="border:1px solid #333; padding:4px; text-align:center;">🍱 午餐与午休静养</td>
+            <td style="border:1px solid #333; padding:4px; text-align:center;">家庭午餐</td>
+          </tr>
+        `;
+      }
+
+      const pTime = periodTimes[pIdx] || `第${pIdx + 1}节`;
+      let cellsHtml = `<td style="border:1px solid #333; padding:6px; font-weight:bold; background:#fafafa;">第${pIdx + 1}节<div style="font-size:10px; color:#555;">${pTime}</div></td>`;
+
+      for (let dIdx = 0; dIdx < 5; dIdx++) {
+        const day = dayCols[dIdx];
+        const subj = day?.periods[pIdx] || '—';
+        cellsHtml += `<td style="border:1px solid #333; padding:6px; font-weight:600; font-size:12px;">${subj}</td>`;
+      }
+
+      const weekendCell =
+        pIdx === 0
+          ? `<td rowspan="${Math.min(maxPeriods, 4)}" style="border:1px solid #333; padding:6px; vertical-align:middle; background:#fefce8; font-size:11px;"><strong>周六课余：</strong><br/>15:00 象棋对弈 & 器乐练习<br/><br/><strong>周日：</strong><br/>家庭阅读与体能拓展</td>`
+          : pIdx >= 4 && pIdx === 4
+          ? `<td rowspan="${maxPeriods - 4}" style="border:1px solid #333; padding:6px; vertical-align:middle; background:#f0fdf4; font-size:11px;"><strong>周末自由：</strong><br/>周日晚间 错题清账与新周书桌整理</td>`
+          : '';
+
+      rowsHtml += `<tr>${cellsHtml}${weekendCell}</tr>`;
+    }
+
+    if (includeFixedHabitsInPrint) {
+      rowsHtml += `
+        <tr style="background:#fff7ed; font-weight:bold;">
+          <td style="border:1px solid #333; padding:6px;">晚间习惯<div style="font-size:10px; color:#555;">20:45 - 21:30</div></td>
+          <td colspan="5" style="border:1px solid #333; padding:6px; text-align:center; font-size:12px;">
+            🏃 晚间中考体育锻炼 (1分钟跳绳3组 + 立定跳远) · 21:30 睡前英语原版阅读
+          </td>
+          <td style="border:1px solid #333; padding:6px; text-align:center; font-size:11px;">中考体育专项打卡</td>
+        </tr>
+      `;
+    }
+
+    printRoot.innerHTML = `
+      <div style="padding: 18px 24px; max-width: 1040px; margin: 0 auto; color: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', sans-serif;">
+        <div style="text-align: center; border-bottom: 2px solid #222; padding-bottom: 10px; margin-bottom: 12px;">
+          <h1 style="font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -0.02em;">
+            ${schoolTitle} 课程与作息总表
+          </h1>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 6px; color: #444;">
+            <span><strong>学生：</strong>${studentName || '李子涵'} (${gradeClass || '初一(6)班'})</span>
+            <span><strong>学期：</strong>${recognitionResult.semesterLabel || '2026年秋季学期'}</span>
+            <span><strong>打印时间：</strong>${new Date().toLocaleDateString('zh-CN')}</span>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 11px;">
+          <thead>
+            <tr style="background: #e5e7eb; font-weight: bold; font-size: 12px;">
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">作息节次</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">星期一</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">星期二</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">星期三</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">星期四</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 14%;">星期五</th>
+              <th style="border: 1px solid #333; padding: 7px; width: 16%;">周末特长与习惯</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666; margin-top: 10px; padding-top: 6px; border-top: 1px solid #ccc;">
+          <span>TodayDesk (desk.6245.cn) · 陪伴每一个初中生从容走过每一天</span>
+          <span>坚持每晚体育锻炼 · 专注高效完成课后作业 · 劳逸结合</span>
+        </div>
+      </div>
+    `;
+
+    window.print();
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -327,7 +469,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                 🏫 或一键选择本学期年级标准课表模板：
               </span>
               <div className="grid grid-cols-1 gap-1.5">
-                {(['grade7', 'grade8', 'grade9'] as const).map((preset) => {
+                {(['zongbei7', 'grade7', 'grade8', 'grade9'] as const).map((preset) => {
                   const active = gradePreset === preset;
                   return (
                     <button
@@ -509,51 +651,78 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
         </div>
 
         {/* Sync Options & Confirm Button */}
-        <div className="p-3 rounded-2xl bg-surface-container-low flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <label className="flex items-center gap-2 cursor-pointer">
+        <div className="p-3 rounded-2xl bg-surface-container-low flex flex-col gap-2 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={syncToExamSubjects}
+                onChange={(e) => setSyncToExamSubjects(e.target.checked)}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span className="font-semibold text-on-surface">
+                同步更新「考试成绩单」与「3秒快记」的本学期学科列表
+              </span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={generateTodayPreviewTasks}
+                onChange={(e) => setGenerateTodayPreviewTasks(e.target.checked)}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span className="font-semibold text-on-surface">
+                根据今日课表自动生成 2 项课后复习/预习待办
+              </span>
+            </label>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer pt-0.5 border-t border-[#EAE4DA]/50">
             <input
               type="checkbox"
-              checked={syncToExamSubjects}
-              onChange={(e) => setSyncToExamSubjects(e.target.checked)}
-              className="rounded text-primary focus:ring-primary"
+              checked={includeFixedHabitsInPrint}
+              onChange={(e) => setIncludeFixedHabitsInPrint(e.target.checked)}
+              className="rounded text-secondary focus:ring-secondary"
             />
-            <span className="font-semibold text-on-surface">
-              同步更新「考试成绩单」与「3秒快记」的本学期学科列表
-            </span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={generateTodayPreviewTasks}
-              onChange={(e) => setGenerateTodayPreviewTasks(e.target.checked)}
-              className="rounded text-primary focus:ring-primary"
-            />
-            <span className="font-semibold text-on-surface">
-              根据今日课表自动生成 2 项课后复习/预习待办
+            <span className="font-medium text-on-surface-variant">
+              将每日体育锻炼 (20:45) 与周末课余兴趣 (象棋/器乐) 合并入总课表与打印单
             </span>
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-1">
+        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold cursor-pointer"
+            onClick={handlePrintTimetable}
+            className="px-4 py-2.5 rounded-full bg-secondary-container hover:bg-secondary text-on-secondary-container hover:text-on-secondary text-xs sm:text-sm font-bold shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            title="生成适合横向打印的 A4 尺寸课表，也可在浏览器中直接另存为 PDF 文件"
           >
-            取消
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirmApply}
-            className="px-5 py-2.5 rounded-full bg-primary hover:bg-primary-container text-on-primary text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              check_circle
+            <span className="material-symbols-outlined text-[17px]">
+              print
             </span>
-            <span>
-              确认导入课表 · 启用本学期 {selectedSubjects.length} 门学科 ✓
-            </span>
+            <span>🖨️ 导出打印课表 (A4纸/PDF)</span>
           </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold cursor-pointer"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmApply}
+              className="px-5 py-2.5 rounded-full bg-primary hover:bg-primary-container text-on-primary text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                check_circle
+              </span>
+              <span>
+                确认导入课表 · 启用本学期 {selectedSubjects.length} 门学科 ✓
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

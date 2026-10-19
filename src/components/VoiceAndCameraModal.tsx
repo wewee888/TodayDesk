@@ -258,6 +258,61 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
     }
   };
 
+  // Update parsed task item (title, duration minutes, subject, category)
+  const handleUpdateParsedTask = (
+    index: number,
+    patch: Partial<ParsedVoiceTask>
+  ) => {
+    setParsedTasks((prev) =>
+      prev.map((t, idx) => (idx === index ? { ...t, ...patch } : t))
+    );
+  };
+
+  const handleAdjustMinutes = (index: number, delta: number) => {
+    setParsedTasks((prev) =>
+      prev.map((t, idx) =>
+        idx === index
+          ? {
+              ...t,
+              estimatedMinutes: Math.min(
+                240,
+                Math.max(5, Math.round(t.estimatedMinutes + delta))
+              ),
+            }
+          : t
+      )
+    );
+  };
+
+  const handleAddNewTaskRow = () => {
+    setParsedTasks((prev) => [
+      ...prev,
+      {
+        category: '作业',
+        subject: '数学',
+        taskType: '作业练习',
+        title: '新增学习任务',
+        estimatedMinutes: 25,
+        statusNote: '手动添加',
+      },
+    ]);
+  };
+
+  const COMMON_SUBJECT_OPTIONS = [
+    '数学',
+    '语文',
+    '英语',
+    '物理',
+    '化学',
+    '历史',
+    '地理',
+    '生物',
+    '道法',
+    '体育锻炼',
+    '课余兴趣',
+    '自主自习',
+  ];
+
   // Discard a single item before adding to desk
   const handleRemoveParsedTask = (indexToRemove: number) => {
     setParsedTasks((prev) => prev.filter((_, idx) => idx !== indexToRemove));
@@ -448,43 +503,159 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
               </div>
             </div>
 
-            {/* Structured Breakdown Preview (with single-item delete capability) */}
+            {/* Structured Breakdown Preview (Fully Editable & Modifiable Duration) */}
             {parsedTasks.length > 0 && (
-              <div className="space-y-2 bg-surface-container-low p-3 rounded-2xl border border-surface-container">
+              <div className="space-y-2.5 bg-surface-container-low p-3.5 rounded-2xl border border-surface-container">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-secondary">
-                    ⚡ 自动拆解为 {parsedTasks.length} 项自律作业卡片：
-                  </span>
-                  <span className="text-[10px] text-on-surface-variant">
-                    点击 ✕ 可剔除单项
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[17px] text-secondary">
+                      edit_note
+                    </span>
+                    <span className="text-[11px] font-bold text-secondary">
+                      ⚡ 识别出 {parsedTasks.length} 项卡片（支持直接修改任务名与时间）：
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddNewTaskRow}
+                    className="text-[11px] font-bold text-primary hover:underline cursor-pointer flex items-center gap-0.5"
+                  >
+                    + 补充一项
+                  </button>
                 </div>
-                <div className="space-y-1.5">
+
+                <div className="space-y-2">
                   {parsedTasks.map((t, idx) => (
                     <div
-                      key={`${t.subject}-${idx}`}
-                      className="p-2.5 rounded-xl bg-white shadow-2xs flex items-center justify-between gap-2 text-xs"
+                      key={`parsed-row-${idx}`}
+                      className="p-3 rounded-2xl bg-white shadow-2xs border border-[#EAE4DA] flex flex-col gap-2 transition-all hover:border-primary/40"
                     >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container text-[11px] font-semibold shrink-0">
-                          {t.category} | {t.subject}
-                        </span>
-                        <span className="font-semibold text-on-surface truncate">
-                          {t.title}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-bold text-[11px]">
-                          {t.estimatedMinutes}min
-                        </span>
+                      {/* Top row: Subject & Category Selector + Delete Button */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={t.subject}
+                            onChange={(e) => {
+                              const newSubj = e.target.value;
+                              const isPE = newSubj === '体育锻炼';
+                              const isInterest = newSubj === '课余兴趣';
+                              handleUpdateParsedTask(idx, {
+                                subject: newSubj,
+                                category: isPE
+                                  ? '体育'
+                                  : isInterest
+                                  ? '兴趣'
+                                  : t.category,
+                              });
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-secondary-container text-on-secondary-container text-[11px] font-bold border border-secondary/25 cursor-pointer focus:outline-none focus:border-secondary"
+                          >
+                            {COMMON_SUBJECT_OPTIONS.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+
+                          <span className="text-[10px] text-outline font-medium">
+                            {t.taskType || '作业练习'}
+                          </span>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => handleRemoveParsedTask(idx)}
-                          className="w-5 h-5 rounded-full hover:bg-error-container/20 text-outline hover:text-error flex items-center justify-center cursor-pointer"
+                          className="w-6 h-6 rounded-full hover:bg-error-container/20 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors text-xs"
                           title="移除此项"
                         >
                           ✕
                         </button>
+                      </div>
+
+                      {/* Middle row: Editable Task Title */}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={t.title}
+                          onChange={(e) =>
+                            handleUpdateParsedTask(idx, {
+                              title: e.target.value,
+                            })
+                          }
+                          placeholder="输入具体作业内容（如：做第45-52题练习）"
+                          className="w-full bg-[#FAF7F2] text-xs font-semibold text-on-surface border border-[#EAE4DA] focus:border-primary focus:bg-white rounded-xl px-2.5 py-1.5 transition-all outline-none"
+                        />
+                      </div>
+
+                      {/* Bottom row: Editable Duration with -5m / +5m and quick pills */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#EAE4DA]/50 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-on-surface-variant font-medium">
+                            预计用时:
+                          </span>
+                          <div className="flex items-center bg-surface-container-low rounded-lg p-0.5 border border-[#EAE4DA]">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustMinutes(idx, -5)}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-on-surface-variant hover:bg-white cursor-pointer active:scale-95"
+                              title="减少5分钟"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={5}
+                              max={240}
+                              step={5}
+                              value={t.estimatedMinutes}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!Number.isNaN(val)) {
+                                  handleUpdateParsedTask(idx, {
+                                    estimatedMinutes: Math.min(
+                                      240,
+                                      Math.max(5, val)
+                                    ),
+                                  });
+                                }
+                              }}
+                              className="w-9 text-center bg-transparent text-xs font-bold text-primary tabular-nums focus:outline-none"
+                            />
+                            <span className="text-[10px] text-on-surface-variant pr-1">
+                              分
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustMinutes(idx, 5)}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-on-surface-variant hover:bg-white cursor-pointer active:scale-95"
+                              title="增加5分钟"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quick duration presets */}
+                        <div className="flex items-center gap-1">
+                          {[15, 25, 35, 45, 60].map((mins) => (
+                            <button
+                              key={mins}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateParsedTask(idx, {
+                                  estimatedMinutes: mins,
+                                })
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
+                                t.estimatedMinutes === mins
+                                  ? 'bg-primary text-on-primary shadow-2xs font-bold'
+                                  : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'
+                              }`}
+                            >
+                              {mins}m
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ))}

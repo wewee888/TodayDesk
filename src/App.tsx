@@ -27,7 +27,10 @@ import {
   clearMistakeItem,
   getSubjectBadgeClass,
   getSubjectMeta,
+  getSystemDateInfo,
+  parseTimetableContent,
   resolveReviewStatus,
+  shiftDate,
 } from './utils/studyLogic';
 import { YesterdayReviewBanner } from './components/YesterdayReviewBanner';
 import { RoutineScheduleCarousel } from './components/RoutineScheduleCarousel';
@@ -170,6 +173,42 @@ export default function App() {
 
   const [isDeskSettingsOpen, setIsDeskSettingsOpen] = useState(false);
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
+
+  // Real Date Navigation & Calendar Timeline State
+  const [currentDateOffset, setCurrentDateOffset] = useState<number>(0);
+  const targetDate = shiftDate(new Date(), currentDateOffset);
+  const currentDateInfo = getSystemDateInfo(targetDate);
+
+  // Parent Cheer Note state
+  const [parentCheerNote, setParentCheerNote] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem('todaydesk_parent_cheer_v1');
+    } catch {
+      return null;
+    }
+  });
+
+  // Timetable recognition result state (supports Chengdu Zongbei Middle School & dynamic schedules)
+  const [timetableResult, setTimetableResult] =
+    useState<TimetableRecognitionResult>(() => {
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('todaydesk_timetable_result_v1');
+          if (raw) return JSON.parse(raw);
+        } catch {}
+      }
+      return parseTimetableContent(
+        '成都市棕北中学 初2026届7年级6班课程表\n' +
+          '周一：语文、数学、英语、生物、地理、书法、体育\n' +
+          '周二：数学、语文、英语、历史、心理健康、音乐、体育\n' +
+          '周三：英语、数学、语文、道德与法治、生物、美术、素质选修\n' +
+          '周四：语文、英语、数学、地理、历史、信息科技、体育\n' +
+          '周五：数学、语文、英语、道德与法治、劳动实践、体锻、班会',
+        '成都市棕北中学_七.6班_课表.png',
+        'grade7'
+      );
+    });
 
   const [isDemoPurged, setIsDemoPurged] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -697,12 +736,13 @@ export default function App() {
     minutes: number,
     customTitle?: string
   ) => {
+    const finalTitle = customTitle || `${subject} · ${taskType}`;
     const newTask: HomeworkTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       subject,
       subjectBadgeClass: getSubjectBadgeClass(subject),
       taskType,
-      title: customTitle || `${subject} · ${taskType}专项`,
+      title: finalTitle,
       estimatedMinutes: minutes,
       completed: false,
       completedPomodoros: 0,
@@ -710,7 +750,7 @@ export default function App() {
     const nextTasks = [newTask, ...homeworkTasks];
     setHomeworkTasks(nextTasks);
     syncToCloudD1({ homeworkTasks: nextTasks });
-    showToast(`已加入今日书桌：${subject} · ${taskType} (${minutes}m) ✨`);
+    showToast(`已加入今日书桌：${finalTitle} (${minutes}m) ✨`);
   };
 
   const handleAddParsedVoiceTasks = (parsedList: ParsedVoiceTask[]) => {
@@ -1064,6 +1104,11 @@ export default function App() {
     syncToExamSubjects: boolean,
     generateTodayPreviewTasks: boolean
   ) => {
+    setTimetableResult(result);
+    try {
+      localStorage.setItem('todaydesk_timetable_result_v1', JSON.stringify(result));
+    } catch {}
+
     // 1. Merge detected subjects into deskSettings.customSubjects
     setDeskSettings((prev) => {
       const merged = Array.from(
@@ -1184,10 +1229,10 @@ export default function App() {
             </span>
           </a>
 
-          {/* Zone 2: Clean Single-Line Nav Links on Desktop */}
+          {/* Zone 2: Clean Streamlined Nav Links on Desktop (No Duplicates!) */}
           <nav
             aria-label="主导航"
-            className="hidden md:flex items-center gap-5 text-sm font-medium text-on-surface-variant"
+            className="hidden md:flex items-center gap-6 text-sm font-medium text-on-surface-variant"
           >
             <button
               type="button"
@@ -1197,28 +1242,11 @@ export default function App() {
               }}
               className={`hover:text-on-surface transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 activeView === 'desk'
-                  ? 'text-primary font-semibold underline underline-offset-4'
+                  ? 'text-primary font-bold underline underline-offset-4'
                   : ''
               }`}
             >
               今日书桌
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsQuickSheetOpen(true)}
-              className="hover:text-on-surface transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              3秒免打字快记
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsTimetableModalOpen(true)}
-              className="hover:text-primary transition-colors whitespace-nowrap shrink-0 cursor-pointer inline-flex items-center gap-1 text-secondary font-semibold"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                calendar_view_week
-              </span>
-              <span>导课表识学科</span>
             </button>
             <button
               type="button"
@@ -1228,18 +1256,11 @@ export default function App() {
               }}
               className={`hover:text-on-surface transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 activeView === 'archive'
-                  ? 'text-primary font-semibold underline underline-offset-4'
+                  ? 'text-primary font-bold underline underline-offset-4'
                   : ''
               }`}
             >
               成长档案与清账
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsDeskSettingsOpen(true)}
-              className="hover:text-on-surface transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              体育与课余设置
             </button>
             <button
               type="button"
@@ -1250,14 +1271,58 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: Contextual Actions (Notifications, Settings, Profile) */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Zone 3: Contextual Actions (Role Switcher, Notifications, Settings, Profile) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Student Focus vs Parent Companion Role Switcher */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextRole: 'student' | 'parent' =
+                  currentUserProfile?.role === 'parent' ? 'student' : 'parent';
+                const updated: UserAccountProfile = {
+                  ...(currentUserProfile || {
+                    account: 'lizihan',
+                    studentName: deskSettings.studentName,
+                    gradeClass: deskSettings.gradeClass,
+                    role: 'student',
+                  }),
+                  role: nextRole,
+                };
+                setCurrentUserProfile(updated);
+                try {
+                  localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(updated));
+                } catch {}
+                showToast(
+                  nextRole === 'parent'
+                    ? '已切换为「👨‍👩‍👧 家长静默伴学」视角 · 开启学情概览与暖心便签'
+                    : '已切换为「🧑‍🎓 学生心流专注」视角 · 开启番茄钟沉浸攻坚'
+                );
+              }}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap border shadow-2xs active:scale-95 ${
+                currentUserProfile?.role === 'parent'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+              }`}
+              title="轻点在「学生心流专注」与「家长静默伴学」视角间一键切换"
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {currentUserProfile?.role === 'parent'
+                  ? 'family_restroom'
+                  : 'psychology'}
+              </span>
+              <span>
+                {currentUserProfile?.role === 'parent'
+                  ? '家长伴学视角'
+                  : '学生专注视角'}
+              </span>
+            </button>
+
             <div className="relative">
               <button
                 type="button"
                 aria-label="消息通知"
                 onClick={() => setShowNotifications((prev) => !prev)}
-                className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">
                   notifications
@@ -1286,7 +1351,7 @@ export default function App() {
                   </div>
                   <div className="p-2.5 rounded-xl bg-surface-container-low space-y-1">
                     <div className="font-semibold text-primary">
-                      AI 家庭学情周报已生成 10 月月考复盘
+                      AI 家庭学情周报已生成
                     </div>
                     <p className="text-on-surface-variant">
                       点击「成长档案与清账」查看平时作业耗时与考分产出罗盘。
@@ -1300,7 +1365,7 @@ export default function App() {
               type="button"
               aria-label="导入课程表自动识别学科"
               onClick={() => setIsTimetableModalOpen(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary-container/60 text-on-secondary-container hover:bg-secondary-container transition-colors cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-secondary-container/60 text-on-secondary-container hover:bg-secondary-container transition-colors cursor-pointer"
               title="导入课程表自动识别本学期学科"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -1312,23 +1377,11 @@ export default function App() {
               type="button"
               aria-label="体育与课余后台设置"
               onClick={() => setIsDeskSettingsOpen(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
               title="体育与课余活动后台设置"
             >
               <span className="material-symbols-outlined text-[19px]">
                 tune
-              </span>
-            </button>
-
-            <button
-              type="button"
-              aria-label="家庭学情周报"
-              onClick={() => setIsWeeklyReportOpen(true)}
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-xs cursor-pointer hover:bg-primary-container transition-colors"
-              title="查看 AI 家庭学情周报"
-            >
-              <span className="material-symbols-outlined text-on-primary text-[17px]">
-                analytics
               </span>
             </button>
 
@@ -1390,13 +1443,45 @@ export default function App() {
             {/* Student Meta Header & Segmented View Switcher */}
             <div className="flex flex-col space-y-2.5">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[20px] leading-[28px] font-bold text-on-surface tracking-tight">
-                    周三 · 10月18日
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-secondary-container/60 text-on-secondary-container text-[11px] font-semibold">
-                    第 7 教学周
-                  </span>
+                {/* Real Calendar Date Navigation Bar (前一天 | 当前日期 | 今天 | 后一天) */}
+                <div className="flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-full border border-[#EAE4DA] shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentDateOffset((prev) => prev - 1)}
+                    className="w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center text-outline hover:text-on-surface cursor-pointer transition-colors"
+                    title="回溯前一天书桌"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5 px-1.5">
+                    <span className="text-[14px] sm:text-[16px] font-bold text-on-surface tracking-tight whitespace-nowrap">
+                      {currentDateInfo.formatted}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-secondary-container/60 text-on-secondary-container text-[11px] font-semibold whitespace-nowrap">
+                      第 {currentDateInfo.weekNumber} 教学周
+                    </span>
+                  </div>
+
+                  {currentDateOffset !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentDateOffset(0)}
+                      className="px-2 py-0.5 rounded-full bg-primary text-on-primary text-[10px] font-bold cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      title="返回今天"
+                    >
+                      今天
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentDateOffset((prev) => prev + 1)}
+                    className="w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center text-outline hover:text-on-surface cursor-pointer transition-colors"
+                    title="查看后一天书桌"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1415,23 +1500,6 @@ export default function App() {
                     <span className="material-symbols-outlined text-[13px] text-outline">
                       edit
                     </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsTimetableModalOpen(true)}
-                    className="px-2.5 py-0.5 rounded-full bg-primary-fixed/60 hover:bg-primary-fixed text-primary text-[11px] font-semibold cursor-pointer flex items-center gap-1 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[13px]">
-                      calendar_view_week
-                    </span>
-                    <span>导课表识学科</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDeskSettingsOpen(true)}
-                    className="text-xs font-semibold text-tertiary hover:underline cursor-pointer flex items-center gap-0.5"
-                  >
-                    <span>设置体育/课余</span>
                   </button>
                 </div>
               </div>
@@ -1551,6 +1619,20 @@ export default function App() {
                   gradeClass={deskSettings.gradeClass}
                   pomodoroMinutes={deskSettings.pomodoroMinutes}
                   customSubjects={deskSettings.customSubjects}
+                  role={currentUserProfile?.role || 'student'}
+                  parentCheerNote={parentCheerNote}
+                  onSendParentCheer={(note) => {
+                    setParentCheerNote(note);
+                    try {
+                      localStorage.setItem('todaydesk_parent_cheer_v1', note);
+                    } catch {}
+                  }}
+                  onClearParentCheer={() => {
+                    setParentCheerNote(null);
+                    try {
+                      localStorage.removeItem('todaydesk_parent_cheer_v1');
+                    } catch {}
+                  }}
                   onToggleTaskComplete={handleToggleTaskComplete}
                   onSelectDuration={handleSelectDuration}
                   onUpdateTask={handleUpdateTask}
@@ -1610,6 +1692,10 @@ export default function App() {
               onShowToast={showToast}
               onOpenSettings={() => setIsDeskSettingsOpen(true)}
               inlineMode={true}
+              onOpenVoiceModal={() => setVoiceOrCameraMode('voice')}
+              onOpenCameraModal={() => setVoiceOrCameraMode('camera')}
+              timetableGrid={timetableResult.weeklyGrid}
+              weekdayName={currentDateInfo.weekdayName}
             />
 
             {/* Companion Desk Snapshot & AI Weekly Report Trigger */}
@@ -1645,9 +1731,9 @@ export default function App() {
         </div>
       </main>
 
-      {/* Floating Action Dock (全能悬浮岛 - 今日书桌专属) */}
+      {/* Floating Action Dock (全能悬浮岛 - 仅在手机/平板竖屏侧栏收起时展示，桌面端lg+已整合至右侧快记面板) */}
       {activeView === 'desk' && (
-        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-5 left-0 right-0 px-2 sm:px-5 z-40 pointer-events-none">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-0 right-0 px-2 sm:px-5 z-40 pointer-events-none lg:hidden">
           <div className="max-w-md w-full mx-auto pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-xl rounded-full p-1 shadow-[0_8px_28px_rgba(42,24,0,0.14)] border border-[#EAE4DA] grid grid-cols-[1fr_1.12fr_1fr] items-center gap-1 overflow-hidden">
             {/* Left Button: + 3秒快记 */}
             <button
@@ -1792,6 +1878,10 @@ export default function App() {
           setIsQuickSheetOpen(false);
           setIsDeskSettingsOpen(true);
         }}
+        onOpenVoiceModal={() => setVoiceOrCameraMode('voice')}
+        onOpenCameraModal={() => setVoiceOrCameraMode('camera')}
+        timetableGrid={timetableResult?.weeklyGrid}
+        weekdayName={currentDateInfo.weekdayName}
       />
 
       {/* Desk Backend Settings Modal (PE Exam Exercises & Extracurricular Hobbies) */}
@@ -1817,6 +1907,9 @@ export default function App() {
         onClose={() => setIsTimetableModalOpen(false)}
         onApplyTimetableResult={handleApplyTimetableResult}
         onShowToast={showToast}
+        gradeClass={deskSettings.gradeClass}
+        studentName={deskSettings.studentName}
+        schedules={schedules}
       />
 
       {/* Voice & Camera AI Recognition Modal */}

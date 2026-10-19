@@ -942,39 +942,39 @@ export const SUBJECT_TASK_PRESETS: Record<
   数学: {
     taskTypes: ['错题订正', '作业练习', '试卷测试', '课前预习'],
     defaultTitles: {
-      错题订正: '二次函数压轴错题重做与归纳',
-      作业练习: '同步练习册函数图像专项精练',
-      试卷测试: '学校发卷 · 阶段限时综合小测',
-      课前预习: '新课微预习：反比例函数性质导学',
+      错题订正: '数学错题订正与归纳',
+      作业练习: '数学同步练习册专项精练',
+      试卷测试: '数学阶段限时综合小测',
+      课前预习: '数学新课导学微预习',
     },
   },
   语文: {
     taskTypes: ['作业练习', '背诵默写', '试卷测试', '课前预习', '错题订正'],
     defaultTitles: {
-      作业练习: '文言文实词虚词梳理与导学案',
-      背诵默写: '《醉翁亭记》全文背诵与默写自测',
-      试卷测试: '现代文阅读理解专项限时卷',
-      课前预习: '新课微预习：古诗词鉴赏背景通读',
-      错题订正: '病句辨析与古诗文默写易错字订正',
+      作业练习: '语文同步作业与导学案',
+      背诵默写: '语文重点篇目背诵与默写',
+      试卷测试: '现代文阅读与综合限时卷',
+      课前预习: '语文新课背景与课文通读',
+      错题订正: '生字词与阅读题错题订正',
     },
   },
   英语: {
     taskTypes: ['作业练习', '背诵默写', '试卷测试', '错题订正', '课前预习'],
     defaultTitles: {
       作业练习: '完形填空与语篇阅读精读训练',
-      背诵默写: 'Unit 5 核心词汇短语听写与朗读',
-      试卷测试: '单元测试卷听力与语法综合演练',
-      错题订正: '定语从句关系代词错题归档重做',
-      课前预习: '课文原声跟读与生词预标注',
+      背诵默写: '核心词汇短语听写与朗读',
+      试卷测试: '单元测试卷听力与语法小测',
+      错题订正: '语法考点与易错题归档重做',
+      课前预习: '课文原声跟读与生词预习',
     },
   },
   物理: {
     taskTypes: ['课前预习', '作业练习', '试卷测试', '错题订正'],
     defaultTitles: {
-      课前预习: '凸透镜成像规律实验探究微预习',
-      作业练习: '同步练习册光学作图与计算专项',
-      试卷测试: '阶段单元核心考点限时检测卷',
-      错题订正: '受力分析与透镜焦距判断错题订正',
+      课前预习: '物理新课实验探究微预习',
+      作业练习: '物理同步练习册专项精练',
+      试卷测试: '阶段核心考点限时自测卷',
+      错题订正: '物理公式与概念错题订正',
     },
   },
   化学: {
@@ -1475,8 +1475,18 @@ const KNOWN_TIMETABLE_SUBJECTS: {
   { keyword: '微机', normalized: '信息科技', isAcademic: false },
   { keyword: '编程', normalized: '信息科技', isAcademic: false },
   { keyword: '体育', normalized: '体育锻炼', isAcademic: false },
+  { keyword: '体锻', normalized: '体育锻炼', isAcademic: false },
   { keyword: '美术', normalized: '美术', isAcademic: false },
   { keyword: '音乐', normalized: '音乐', isAcademic: false },
+  { keyword: '书法', normalized: '书法', isAcademic: false },
+  { keyword: '心理', normalized: '心理健康', isAcademic: false },
+  { keyword: '选修', normalized: '素质选修', isAcademic: false },
+  { keyword: '素质', normalized: '素质选修', isAcademic: false },
+  { keyword: '班会', normalized: '班会', isAcademic: false },
+  { keyword: '延时', normalized: '延时辅导', isAcademic: false },
+  { keyword: '语延', normalized: '语延', isAcademic: true },
+  { keyword: '数延', normalized: '数延', isAcademic: true },
+  { keyword: '英延', normalized: '英延', isAcademic: true },
 ];
 
 export function parseTimetableContent(
@@ -1494,6 +1504,76 @@ export function parseTimetableContent(
         detectedAcademic.add(item.normalized);
       } else {
         detectedExtra.add(item.normalized);
+      }
+    }
+  }
+
+  // Check if rawText contains structured daily lines e.g. "周一：历史(徐倩)、语文(何川)..."
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const dayMap: Record<
+    string,
+    { morningReading?: string; periods: (string | TimetablePeriodDetail)[] }
+  > = {
+    周一: { periods: [] },
+    周二: { periods: [] },
+    周三: { periods: [] },
+    周四: { periods: [] },
+    周五: { periods: [] },
+  };
+  let foundStructuredDay = false;
+
+  for (const line of lines) {
+    const match = line.match(/^(周[一二三四五]|星期[一二三四五])[：:\s](.*)/);
+    if (match) {
+      foundStructuredDay = true;
+      const dayKey = match[1].replace('星期', '周');
+      const content = match[2];
+      const items = content
+        .split(/[、,，\t\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const parsedPeriods: (string | TimetablePeriodDetail)[] = [];
+      let morning = '';
+      let pIdx = 1;
+
+      for (const item of items) {
+        if (item.includes('早读')) {
+          morning = item.replace(/早读[：:]?/, '').trim() || '早读';
+        } else {
+          // parse teacher if format like "历史(徐倩)" or "语文(何川)"
+          const tMatch = item.match(/^([^(（]+)[(（]([^)）]+)[)）]$/);
+          if (tMatch) {
+            const subj = tMatch[1].trim();
+            const teacher = tMatch[2].trim();
+            parsedPeriods.push({
+              periodIndex: pIdx++,
+              subject: subj,
+              teacher: teacher,
+            });
+            for (const k of KNOWN_TIMETABLE_SUBJECTS) {
+              if (subj.includes(k.keyword)) {
+                if (k.isAcademic) detectedAcademic.add(k.normalized);
+                else detectedExtra.add(k.normalized);
+                break;
+              }
+            }
+          } else {
+            parsedPeriods.push({
+              periodIndex: pIdx++,
+              subject: item,
+            });
+            for (const k of KNOWN_TIMETABLE_SUBJECTS) {
+              if (item.includes(k.keyword)) {
+                if (k.isAcademic) detectedAcademic.add(k.normalized);
+                else detectedExtra.add(k.normalized);
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (dayMap[dayKey]) {
+        dayMap[dayKey] = { morningReading: morning, periods: parsedPeriods };
       }
     }
   }
@@ -1524,11 +1604,6 @@ export function parseTimetableContent(
     new Set([...academicSubjects, ...extraSubjects])
   );
 
-  // Build a realistic 5-day x 7-period timetable grid from the detected subjects
-  const pool =
-    academicSubjects.length > 0
-      ? academicSubjects
-      : ['语文', '数学', '英语', '物理', '历史', '地理', '生物', '道法'];
   const days: ('周一' | '周二' | '周三' | '周四' | '周五')[] = [
     '周一',
     '周二',
@@ -1537,21 +1612,43 @@ export function parseTimetableContent(
     '周五',
   ];
 
-  const weeklyGrid: TimetableDaySchedule[] = days.map((day, dIdx) => {
-    const periods: SubjectName[] = [];
-    for (let p = 0; p < 7; p++) {
-      if (p === 4 && dIdx % 2 === 0) {
-        periods.push('体育锻炼');
-      } else if (p === 6 && dIdx === 2 && extraSubjects.includes('信息科技')) {
-        periods.push('信息科技');
-      } else if (p === 6 && dIdx === 4 && extraSubjects.includes('美术')) {
-        periods.push('美术');
-      } else {
-        periods.push(pool[(dIdx * 3 + p) % pool.length]);
+  let weeklyGrid: TimetableDaySchedule[] = [];
+
+  if (foundStructuredDay) {
+    weeklyGrid = days.map((day) => ({
+      day,
+      dayName: day,
+      morningReading: dayMap[day].morningReading,
+      periods: dayMap[day].periods,
+    }));
+  } else {
+    // Build a realistic 5-day x 7-period timetable grid from the detected subjects
+    const pool =
+      academicSubjects.length > 0
+        ? academicSubjects
+        : ['语文', '数学', '英语', '物理', '历史', '地理', '生物', '道法'];
+
+    weeklyGrid = days.map((day, dIdx) => {
+      const periods: SubjectName[] = [];
+      for (let p = 0; p < 7; p++) {
+        if (p === 4 && dIdx % 2 === 0) {
+          periods.push('体育锻炼');
+        } else if (p === 6 && dIdx === 2 && extraSubjects.includes('信息科技')) {
+          periods.push('信息科技');
+        } else if (p === 6 && dIdx === 4 && extraSubjects.includes('美术')) {
+          periods.push('美术');
+        } else {
+          periods.push(pool[(dIdx * 3 + p) % pool.length]);
+        }
       }
-    }
-    return { day, periods };
-  });
+      return { day, dayName: day, periods };
+    });
+  }
+
+  const schoolAndClass =
+    text.includes('棕北中学') || sourceName.includes('棕北中学')
+      ? '成都市棕北中学 七.6'
+      : undefined;
 
   const semesterLabel =
     gradePreset === 'grade7'
@@ -1562,6 +1659,7 @@ export function parseTimetableContent(
 
   return {
     semesterLabel,
+    schoolAndClass,
     detectedSubjects,
     academicSubjects,
     extraSubjects,
@@ -1659,6 +1757,116 @@ export function toggleTaskTeacherAllCorrect(
     isNowAllCorrect,
   };
 }
+
+/**
+ * Returns real dynamic date info with teaching week calculation
+ */
+export function getSystemDateInfo(dateInput?: string | Date): {
+  dateStr: string; // YYYY-MM-DD
+  displayDate: string; // "10月20日"
+  weekdayName: '周一' | '周二' | '周三' | '周四' | '周五' | '周六' | '周日';
+  fullLabel: string; // "周二 · 10月20日"
+  teachingWeek: number; // e.g. 第 8 教学周
+  isToday: boolean;
+} {
+  const d = dateInput ? new Date(dateInput) : new Date();
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const weekdays: ('周日' | '周一' | '周二' | '周三' | '周四' | '周五' | '周六')[] = [
+    '周日',
+    '周一',
+    '周二',
+    '周三',
+    '周四',
+    '周五',
+    '周六',
+  ];
+  const weekdayName = (weekdays[d.getDay()] || '周一') as any;
+
+  // Calculate teaching week from autumn semester start (Sept 1)
+  const semesterStart = new Date(year, 8, 1);
+  const diffDays = Math.max(
+    0,
+    Math.floor((d.getTime() - semesterStart.getTime()) / (1000 * 60 * 60 * 24))
+  );
+  const teachingWeek = Math.min(22, Math.max(1, Math.floor(diffDays / 7) + 1));
+
+  const now = new Date();
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  return {
+    dateStr,
+    displayDate: `${month}月${day}日`,
+    weekdayName,
+    fullLabel: `${weekdayName} · ${month}月${day}日`,
+    teachingWeek,
+    isToday,
+  };
+}
+
+export function shiftDate(dateStr: string, offsetDays: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + offsetDays);
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function getTimetableSubjectsForDay(
+  weeklyGrid: TimetableDaySchedule[] | undefined,
+  weekdayName: string
+): {
+  todaySubjects: SubjectName[];
+  tomorrowSubjects: SubjectName[];
+} {
+  if (!weeklyGrid || weeklyGrid.length === 0) {
+    return { todaySubjects: [], tomorrowSubjects: [] };
+  }
+
+  const dayMap: Record<string, string> = {
+    周一: '周二',
+    周二: '周三',
+    周三: '周四',
+    周四: '周五',
+    周五: '周一',
+    周六: '周日',
+    周日: '周一',
+  };
+
+  const tomorrowName = dayMap[weekdayName] || '周四';
+
+  const findSubjs = (dayKey: string): SubjectName[] => {
+    const col = weeklyGrid.find(
+      (c) => c.day === dayKey || c.dayName === dayKey || c.day?.includes(dayKey)
+    );
+    if (!col || !Array.isArray(col.periods)) return [];
+    const list: SubjectName[] = [];
+    for (const p of col.periods) {
+      const name = typeof p === 'string' ? p : p.subject;
+      if (
+        name &&
+        !list.includes(name) &&
+        !['班会', '自习', '午休', '延时', '素质选修'].includes(name)
+      ) {
+        list.push(name);
+      }
+    }
+    return list;
+  };
+
+  return {
+    todaySubjects: findSubjs(weekdayName),
+    tomorrowSubjects: findSubjs(tomorrowName),
+  };
+}
+
 
 export function computeTeacherAllCorrectSyncSummary(
   tasks: HomeworkTask[]

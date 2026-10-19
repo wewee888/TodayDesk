@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import type { ActivityConfigItem, SubjectName } from '../types/study';
+import type {
+  ActivityConfigItem,
+  SubjectName,
+  TimetableDaySchedule,
+} from '../types/study';
 import {
   RECOMMENDED_EXTRA_SUBJECTS,
   buildTaskTitle,
@@ -7,6 +11,7 @@ import {
   getDefaultSubjectsForGrade,
   getSubjectMeta,
   getTaskPresetsForSubject,
+  getTimetableSubjectsForDay,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
@@ -31,6 +36,10 @@ interface QuickCapsuleSheetProps {
   activityConfigs?: Record<string, ActivityConfigItem>;
   onOpenSettings?: () => void;
   inlineMode?: boolean;
+  onOpenVoiceModal?: () => void;
+  onOpenCameraModal?: () => void;
+  timetableGrid?: TimetableDaySchedule[];
+  weekdayName?: string;
 }
 
 // PE & Quick duration presets: 5, 10, 15, 20, 25, 30, 45 + 60, 90
@@ -53,6 +62,10 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   activityConfigs,
   onOpenSettings,
   inlineMode = false,
+  onOpenVoiceModal,
+  onOpenCameraModal,
+  timetableGrid = [],
+  weekdayName,
 }) => {
   const { dragProps: subjDragProps } = useDragScroll<HTMLDivElement>();
   const [selectedSubject, setSelectedSubject] = useState<SubjectName>('数学');
@@ -99,15 +112,33 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
 
   const allSubjectOptions = [...baseSubjectOptions, ...extraSubjectItems];
 
+  const effectiveWeekday = weekdayName || '周三';
+  const weekdayOrder = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  const curIdx = weekdayOrder.indexOf(effectiveWeekday);
+  const nextWeekday = curIdx >= 0 && curIdx < 6 ? weekdayOrder[curIdx + 1] : '周一';
+
+  const todaySubjects = getTimetableSubjectsForDay(timetableGrid, effectiveWeekday);
+  const tomorrowSubjects = getTimetableSubjectsForDay(timetableGrid, nextWeekday).filter(
+    (s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '班会' && s !== '心理健康'
+  );
+
+  const sortedSubjectOptions = [...allSubjectOptions].sort((a, b) => {
+    const aInToday = todaySubjects.includes(a.label);
+    const bInToday = todaySubjects.includes(b.label);
+    if (aInToday && !bInToday) return -1;
+    if (!aInToday && bInToday) return 1;
+    return 0;
+  });
+
   // Auto-switch selectedSubject if current selection is not part of this grade's curriculum (e.g. was 物理 but switched to 初一)
   useEffect(() => {
     if (
       allSubjectOptions.length > 0 &&
       !allSubjectOptions.some((o) => o.label === selectedSubject)
     ) {
-      setSelectedSubject(allSubjectOptions[0].label);
+      setSelectedSubject(sortedSubjectOptions[0].label);
     }
-  }, [gradeClass, allSubjectOptions, selectedSubject]);
+  }, [gradeClass, allSubjectOptions, selectedSubject, sortedSubjectOptions]);
 
   if (!isOpen && !inlineMode) return null;
 
@@ -189,19 +220,19 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
     }
   };
 
+  const [customNote, setCustomNote] = useState<string>('');
+
   const handleSubmit = () => {
     const cfg = activityConfigs?.[selectedTask];
     const effectiveSubject = cfg?.subject || selectedSubject;
-    const generatedTitle =
-      cfg?.subtitle ||
-      buildTaskTitle(
-        effectiveSubject,
-        selectedTask,
-        extracurricularActivities,
-        peExercises
-      );
-    onAddTask(effectiveSubject, selectedTask, minutes, generatedTitle);
+    const baseTitle = `${effectiveSubject} · ${selectedTask}`;
+    const effectiveTitle = customNote.trim()
+      ? `${baseTitle} (${customNote.trim()})`
+      : cfg?.subtitle || baseTitle;
+
+    onAddTask(effectiveSubject, selectedTask, minutes, effectiveTitle);
     setJustSubmitted(true);
+    setCustomNote('');
     setTimeout(() => {
       setJustSubmitted(false);
       if (!inlineMode) {
@@ -249,19 +280,6 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {onOpenTimetableImport && (
-            <button
-              type="button"
-              onClick={onOpenTimetableImport}
-              className="px-2.5 py-1 rounded-full bg-secondary-container/70 hover:bg-secondary-container text-on-secondary-container text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-              title="导入课程表图片或文件自动识别本学期学科"
-            >
-              <span className="material-symbols-outlined text-[14px] shrink-0">
-                calendar_view_week
-              </span>
-              <span>导课表识学科</span>
-            </button>
-          )}
           {onOpenSettings && (
             <button
               type="button"
@@ -289,6 +307,72 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
         </div>
       </div>
 
+      {/* Desktop Voice & Camera Quick Action Dock */}
+      {(onOpenVoiceModal || onOpenCameraModal) && (
+        <div className="px-4 sm:px-5 pt-2.5 pb-1 flex items-center justify-between gap-2 border-b border-surface-container/40">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-on-surface">
+            <span className="material-symbols-outlined text-primary text-[17px]">
+              electric_bolt
+            </span>
+            <span>口述或拍照建单：</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {onOpenVoiceModal && (
+              <button
+                type="button"
+                onClick={onOpenVoiceModal}
+                className="px-3 py-1 rounded-full bg-primary hover:bg-primary-container text-on-primary text-[11px] font-bold shadow-2xs flex items-center gap-1 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-[14px]">mic</span>
+                <span>语音口述</span>
+              </button>
+            )}
+            {onOpenCameraModal && (
+              <button
+                type="button"
+                onClick={onOpenCameraModal}
+                className="px-2.5 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-[11px] font-semibold flex items-center gap-1 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-[14px] text-secondary">
+                  photo_camera
+                </span>
+                <span>拍板书/作业</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tomorrow Micro-Preview Suggestion Banner */}
+      {tomorrowSubjects.length > 0 && (
+        <div className="mx-4 sm:mx-5 mt-2 p-2 px-3 rounded-2xl bg-secondary-container/40 border border-secondary/25 flex items-center justify-between gap-2 text-xs animate-fade-slide">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="material-symbols-outlined text-secondary text-[16px] shrink-0">
+              tips_and_updates
+            </span>
+            <span className="truncate text-[11px] text-on-surface font-medium">
+              明日{nextWeekday}有 <strong>{tomorrowSubjects.slice(0, 3).join('、')}</strong>，建议今晚安排15分钟微预习
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const previewSubj = tomorrowSubjects[0] || '语文';
+              onAddTask(
+                previewSubj,
+                '微预习',
+                15,
+                `${previewSubj} · 明日新课微预习与重点圈画 (15分钟)`
+              );
+              if (onShowToast) onShowToast(`已添加「${previewSubj}」明日微预习任务 🚀`);
+            }}
+            className="px-2.5 py-0.5 rounded-full bg-white hover:bg-secondary-container text-secondary text-[11px] font-bold border border-secondary/35 shrink-0 cursor-pointer whitespace-nowrap active:scale-95 shadow-2xs"
+          >
+            + 加预习
+          </button>
+        </div>
+      )}
+
       {/* Interactive Options Scroll Area */}
       <div className="px-4 sm:px-5 py-3.5 flex flex-col gap-3.5 overflow-y-auto overflow-x-hidden">
         {/* Step 1: Choose Subject / Domain + Direct Add/Rename Subject */}
@@ -315,8 +399,9 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
           </div>
 
           <div {...subjDragProps} className="flex flex-wrap gap-1.5 select-none">
-            {allSubjectOptions.map((subj) => {
+            {sortedSubjectOptions.map((subj) => {
               const isSelected = selectedSubject === subj.label;
+              const isTaughtToday = todaySubjects.includes(subj.label);
               return (
                 <button
                   key={subj.label}
@@ -325,6 +410,8 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
                   className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1 transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                     isSelected
                       ? 'bg-primary text-on-primary shadow-sm font-semibold'
+                      : isTaughtToday
+                      ? 'bg-primary-fixed/35 text-on-surface border border-primary/25 font-medium'
                       : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'
                   }`}
                 >
@@ -336,6 +423,18 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
                     {subj.icon}
                   </span>
                   <span>{subj.label}</span>
+                  {isTaughtToday && (
+                    <span
+                      className={`text-[9px] px-1 py-0.2 rounded-full font-bold shrink-0 ${
+                        isSelected
+                          ? 'bg-white/25 text-white'
+                          : 'bg-primary text-on-primary'
+                      }`}
+                      title="根据课表，今天有此门课程"
+                    >
+                      今日有课
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -578,6 +677,17 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
           </div>
         </div>
 
+        {/* Optional Custom Specification / Notes Input */}
+        <div className="space-y-1">
+          <input
+            type="text"
+            value={customNote}
+            onChange={(e) => setCustomNote(e.target.value)}
+            placeholder="选填：补充具体页码或任务说明（如：第45-52题、第二单元测试卷）"
+            className="w-full bg-white rounded-xl px-3 py-2 text-xs text-on-surface border border-outline-variant/60 focus:outline-none focus:border-primary shadow-2xs placeholder:text-outline"
+          />
+        </div>
+
         {/* Real-time Live Generated Summary Preview Card */}
         <div className="p-2.5 rounded-2xl bg-secondary-container/40 border border-secondary-container flex items-center gap-2.5 shadow-xs shrink-0">
           <div className="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0 shadow-xs">
@@ -590,13 +700,14 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-[10px] text-on-secondary-container font-bold tracking-wider">
-              生成就绪
+              生成就绪 · 即将加入今日书桌
             </span>
             <span
               data-testid="capsule-preview-text"
               className="text-[13px] font-semibold text-on-surface truncate"
             >
-              ⚡ 将创建：{selectedSubject} · {selectedTask} (预计 {minutes} 分钟)
+              ⚡ 将创建：{selectedSubject} · {selectedTask}
+              {customNote.trim() ? ` (${customNote.trim()})` : ''} (预计 {minutes} 分钟)
             </span>
           </div>
         </div>
