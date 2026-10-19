@@ -536,7 +536,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
               const updated = parseTimetableContent(
                 val,
                 uploadedFileName,
-                gradePreset
+                gradePreset === 'zongbei7' ? 'grade7' : gradePreset
               );
               setRecognitionResult(updated);
               setSelectedSubjects(updated.detectedSubjects);
@@ -627,23 +627,27 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                   <div className="text-center text-xs font-bold text-primary pb-1 border-b border-[#EAE4DA]">
                     {dayCol.day}
                   </div>
-                  {dayCol.periods.map((subj, idx) => (
-                    <div
-                      key={`${dayCol.day}-${idx}`}
-                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-white text-[11px] border border-[#EAE4DA]/50"
-                    >
-                      <span className="text-[10px] text-outline">
-                        第{idx + 1}节
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${getSubjectBadgeClass(
-                          subj
-                        )}`}
+                  {dayCol.periods.map((subjItem, idx) => {
+                    const subjName =
+                      typeof subjItem === 'string' ? subjItem : subjItem.subject;
+                    return (
+                      <div
+                        key={`${dayCol.day}-${idx}`}
+                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-white text-[11px] border border-[#EAE4DA]/50"
                       >
-                        {subj}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="text-[10px] text-outline">
+                          第{idx + 1}节
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${getSubjectBadgeClass(
+                            subjName as any
+                          )}`}
+                        >
+                          {subjName}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>

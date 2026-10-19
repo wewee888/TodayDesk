@@ -35,3 +35,13 @@
 ### 代码提交溯源
 - **Commit ID**: `9e055e7`
 - **提交信息**: `feat(desk): 首屏去冗余与减法理顺、学生与家长双重视角分化、课表按日自动排序联动与A4导出打印、实际耗时对比追踪`
+
+### 紧急故障修复 (2026-10-20 02:20)
+- **问题排查**：前端构建时因 `getTimetableSubjectsForDay` 返回对象解构缺失，导致 `todaySubjects.filter` 在运行时报 `TypeError`，使 React 根组件渲染中断呈现空白页；伴随 `getSystemDateInfo` 别名缺失与课表节次类型断言不严。
+- **修复措施**：
+  1. `src/components/QuickCapsuleSheet.tsx`：解构 `todaySubjects` 数组并严密防呆。
+  2. `src/utils/studyLogic.ts`：完善 `getSystemDateInfo` 与 `shiftDate` 的入参与返回值别名兼容 (`formatted`, `weekNumber`)。
+  3. `src/components/TodayHomeworkList.tsx`：安全计算 `progressPercent` 百分比。
+  4. `src/components/TimetableImportModal.tsx`：完善 `TimetablePeriodDetail` 对象 `subject` 字段兼容取值。
+- **验证与部署**：`tsc --noEmit` 0 错误通过；生产重新编译并推送上线 `index-OevBqKjs.js`。
+

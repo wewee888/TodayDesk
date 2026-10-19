@@ -1280,12 +1280,11 @@ export default function App() {
                 const nextRole: 'student' | 'parent' =
                   currentUserProfile?.role === 'parent' ? 'student' : 'parent';
                 const updated: UserAccountProfile = {
-                  ...(currentUserProfile || {
-                    account: 'lizihan',
-                    studentName: deskSettings.studentName,
-                    gradeClass: deskSettings.gradeClass,
-                    role: 'student',
-                  }),
+                  account: 'lizihan',
+                  studentName: deskSettings.studentName,
+                  gradeClass: deskSettings.gradeClass,
+                  targetGoal: '考入成都市重点高中重点班',
+                  ...(currentUserProfile || {}),
                   role: nextRole,
                 };
                 setCurrentUserProfile(updated);

@@ -252,6 +252,11 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     }
   };
 
+  const progressPercent =
+    summary.totalCount > 0
+      ? Math.round((summary.completedCount / summary.totalCount) * 100)
+      : 0;
+
   return (
     <section aria-label="今日待攻克" className="space-y-3">
       {/* 1. Parent Companion Dashboard (家长静默伴学视角专属) */}
@@ -267,7 +272,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
               </span>
             </div>
             <span className="text-[11px] font-semibold text-primary">
-              已完成 {summary.completedCount} / {summary.totalCount} 项 ({summary.progressPercent}%)
+              已完成 {summary.completedCount} / {summary.totalCount} 项 ({progressPercent}%)
             </span>
           </div>
 
@@ -275,7 +280,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
           <div className="w-full h-2 rounded-full bg-surface-container overflow-hidden">
             <div
               className="h-full bg-secondary transition-all duration-300 rounded-full"
-              style={{ width: `${summary.progressPercent}%` }}
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
 

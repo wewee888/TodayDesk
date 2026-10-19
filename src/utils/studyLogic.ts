@@ -8,6 +8,7 @@ import type {
   ScheduleFrequencyType,
   SubjectName,
   TimetableDaySchedule,
+  TimetablePeriodDetail,
   TimetableRecognitionResult,
 } from '../types/study.ts';
 
@@ -1766,10 +1767,16 @@ export function getSystemDateInfo(dateInput?: string | Date): {
   displayDate: string; // "10月20日"
   weekdayName: '周一' | '周二' | '周三' | '周四' | '周五' | '周六' | '周日';
   fullLabel: string; // "周二 · 10月20日"
+  formatted: string; // "周二 · 10月20日" (alias for fullLabel)
   teachingWeek: number; // e.g. 第 8 教学周
+  weekNumber: number; // e.g. 8 (alias for teachingWeek)
   isToday: boolean;
 } {
-  const d = dateInput ? new Date(dateInput) : new Date();
+  const d = dateInput
+    ? typeof dateInput === 'string'
+      ? new Date(dateInput)
+      : new Date(dateInput.getTime())
+    : new Date();
   const year = d.getFullYear();
   const month = d.getMonth() + 1;
   const day = d.getDate();
@@ -1800,18 +1807,25 @@ export function getSystemDateInfo(dateInput?: string | Date): {
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
 
+  const fullLabel = `${weekdayName} · ${month}月${day}日`;
+
   return {
     dateStr,
     displayDate: `${month}月${day}日`,
     weekdayName,
-    fullLabel: `${weekdayName} · ${month}月${day}日`,
+    fullLabel,
+    formatted: fullLabel,
     teachingWeek,
+    weekNumber: teachingWeek,
     isToday,
   };
 }
 
-export function shiftDate(dateStr: string, offsetDays: number): string {
-  const d = new Date(dateStr);
+export function shiftDate(dateInput: string | Date, offsetDays: number): string {
+  const d =
+    typeof dateInput === 'string'
+      ? new Date(dateInput)
+      : new Date(dateInput.getTime());
   d.setDate(d.getDate() + offsetDays);
   const year = d.getFullYear();
   const month = d.getMonth() + 1;

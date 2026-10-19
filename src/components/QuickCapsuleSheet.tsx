@@ -117,8 +117,9 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   const curIdx = weekdayOrder.indexOf(effectiveWeekday);
   const nextWeekday = curIdx >= 0 && curIdx < 6 ? weekdayOrder[curIdx + 1] : '周一';
 
-  const todaySubjects = getTimetableSubjectsForDay(timetableGrid, effectiveWeekday);
-  const tomorrowSubjects = getTimetableSubjectsForDay(timetableGrid, nextWeekday).filter(
+  const timetableSubjects = getTimetableSubjectsForDay(timetableGrid, effectiveWeekday);
+  const todaySubjects = timetableSubjects.todaySubjects;
+  const tomorrowSubjects = timetableSubjects.tomorrowSubjects.filter(
     (s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '班会' && s !== '心理健康'
   );
 
