@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ReviewItem } from '../types/study';
+import { isDemoReviewItem } from '../utils/studyLogic';
 
 interface YesterdayReviewBannerProps {
   items: ReviewItem[];
@@ -85,12 +86,29 @@ export const YesterdayReviewBanner: React.FC<YesterdayReviewBannerProps> = ({
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                   <span
                     className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 ${item.subjectBadgeClass}`}
                   >
                     {item.subject}
                   </span>
+                  {isDemoReviewItem(item) ? (
+                    <span
+                      data-testid={`review-demo-${item.id}`}
+                      className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0"
+                      title="示范复盘项"
+                    >
+                      示例
+                    </span>
+                  ) : (
+                    <span
+                      data-testid={`review-real-${item.id}`}
+                      className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-secondary-container/70 text-secondary border border-secondary/30 shrink-0"
+                      title="真实复盘项"
+                    >
+                      真实
+                    </span>
+                  )}
                   <span className="text-[13px] leading-[18px] text-on-surface font-medium truncate">
                     {item.title}
                   </span>

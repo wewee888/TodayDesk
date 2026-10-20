@@ -209,7 +209,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           account: matched.account,
           studentName: matched.studentName,
           gradeClass: matched.gradeClass,
-          role: matched.role,
+          role: role || matched.role,
           targetGoal: matched.targetGoal,
         },
         false

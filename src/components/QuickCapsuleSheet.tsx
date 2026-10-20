@@ -12,6 +12,7 @@ import {
   getSubjectMeta,
   getTaskPresetsForSubject,
   getTimetableSubjectsForDay,
+  isHomeworkEligibleSubject,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
@@ -81,11 +82,10 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
     []
   );
 
-  // Dynamically resolve default curriculum based on the student's grade:
-  // 初一 (七年级) -> 语、数、英、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (无物理、无化学)
-  // 初二 (八年级) -> 语、数、英、物理、道法、历史、地理、生物、体育锻炼、课余兴趣、自主自习 (有物理，无化学)
-  // 初三 (九年级) -> 语、数、英、物理、化学、道法、历史、体育锻炼、课余兴趣、自主自习 (有物理、有化学)
-  const baseNames = getDefaultSubjectsForGrade(gradeClass);
+  // 严格过滤主科作业学科，彻底排除语延、数延、英延、延时辅导、书法、音乐、美术等非作业类排课标签
+  const baseNames = getDefaultSubjectsForGrade(gradeClass).filter(
+    isHomeworkEligibleSubject
+  );
   const baseSubjectOptions = baseNames.map((name) => {
     const meta = getSubjectMeta(name);
     return {
@@ -97,7 +97,7 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
 
   const combinedCustom = Array.from(
     new Set([...(customSubjects || []), ...localAddedSubjects])
-  );
+  ).filter(isHomeworkEligibleSubject);
 
   const extraSubjectItems = combinedCustom
     .filter((s) => !baseSubjectOptions.some((b) => b.label === s))
@@ -110,7 +110,9 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
       };
     });
 
-  const allSubjectOptions = [...baseSubjectOptions, ...extraSubjectItems];
+  const allSubjectOptions = [...baseSubjectOptions, ...extraSubjectItems].filter(
+    (item) => isHomeworkEligibleSubject(item.label)
+  );
 
   const effectiveWeekday = weekdayName || '周三';
   const weekdayOrder = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -118,9 +120,11 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   const nextWeekday = curIdx >= 0 && curIdx < 6 ? weekdayOrder[curIdx + 1] : '周一';
 
   const timetableSubjects = getTimetableSubjectsForDay(timetableGrid, effectiveWeekday);
-  const todaySubjects = timetableSubjects.todaySubjects;
+  const todaySubjects = timetableSubjects.todaySubjects.filter(
+    isHomeworkEligibleSubject
+  );
   const tomorrowSubjects = timetableSubjects.tomorrowSubjects.filter(
-    (s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '班会' && s !== '心理健康'
+    isHomeworkEligibleSubject
   );
 
   const sortedSubjectOptions = [...allSubjectOptions].sort((a, b) => {
@@ -131,13 +135,13 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
     return 0;
   });
 
-  // Auto-switch selectedSubject if current selection is not part of this grade's curriculum (e.g. was 物理 but switched to 初一)
+  // Auto-switch selectedSubject if current selection is not part of this grade's curriculum or not an eligible homework subject
   useEffect(() => {
     if (
       allSubjectOptions.length > 0 &&
       !allSubjectOptions.some((o) => o.label === selectedSubject)
     ) {
-      setSelectedSubject(sortedSubjectOptions[0].label);
+      setSelectedSubject(sortedSubjectOptions[0]?.label || '数学');
     }
   }, [gradeClass, allSubjectOptions, selectedSubject, sortedSubjectOptions]);
 
@@ -179,6 +183,15 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   const handleCreateNewSubject = (subjName: string) => {
     const trimmed = subjName.trim();
     if (!trimmed) return;
+    if (!isHomeworkEligibleSubject(trimmed)) {
+      if (onShowToast) {
+        onShowToast(
+          `「${trimmed}」属于课表排课或辅导标签，三秒快记专为主科作业设计，无需录入此类副科`
+        );
+      }
+      setNewSubjInput('');
+      return;
+    }
     if (!allSubjectOptions.some((o) => o.label === trimmed)) {
       setLocalAddedSubjects((prev) => [...prev, trimmed]);
     }
@@ -199,6 +212,12 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   const handleRenameCurrentSubject = () => {
     const trimmed = renameTargetVal.trim();
     if (!trimmed || trimmed === selectedSubject) return;
+    if (!isHomeworkEligibleSubject(trimmed)) {
+      if (onShowToast) {
+        onShowToast(`「${trimmed}」属于课表排课标签，三秒快记专为主科作业设计`);
+      }
+      return;
+    }
     if (onRenameSubject) {
       onRenameSubject(selectedSubject, trimmed);
     }
@@ -277,7 +296,7 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
             </h2>
           </div>
           <p className="text-[11px] text-on-surface-variant whitespace-nowrap">
-            全科作业 · 中考体育 · 课余特长
+            聚焦文化课主科作业 · 已自动过滤语延/延时/音乐/书法等排课副科
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -483,7 +502,7 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
                       handleCreateNewSubject(newSubjInput);
                     }
                   }}
-                  placeholder="输入新学科（如：科学、信息科技、奥数、美术...）"
+                  placeholder="输入新主科学科（如：科学、地理、生物、物理、化学、道法、奥数...）"
                   className="flex-1 bg-white rounded-xl px-2.5 py-1.5 text-xs text-on-surface border border-outline-variant/50 focus:outline-none focus:border-primary"
                 />
                 <button

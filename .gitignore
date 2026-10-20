@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .wrangler/
+.study-desk-state.json
+.playwright-cli/
+.aistudio/

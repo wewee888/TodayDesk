@@ -8,6 +8,7 @@ import type {
 import {
   getAttendanceStatusMeta,
   getScheduleFrequencyBadge,
+  isDemoScheduleItem,
 } from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
@@ -119,12 +120,31 @@ export const RoutineScheduleCarousel: React.FC<RoutineScheduleCarouselProps> = (
         }`}
       >
         <div className="space-y-1">
-          <div className="flex items-center justify-between gap-1">
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold truncate ${item.badgeClass}`}
-            >
-              {item.badgeText}
-            </span>
+          <div className="flex items-center justify-between gap-1 flex-wrap">
+            <div className="flex items-center gap-1 min-w-0">
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold truncate ${item.badgeClass}`}
+              >
+                {item.badgeText}
+              </span>
+              {isDemoScheduleItem(item) ? (
+                <span
+                  data-testid={`schedule-demo-${item.id}`}
+                  className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0"
+                  title="系统示范日程"
+                >
+                  示例
+                </span>
+              ) : (
+                <span
+                  data-testid={`schedule-real-${item.id}`}
+                  className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-secondary-container/70 text-secondary border border-secondary/30 shrink-0"
+                  title="真实固定日程"
+                >
+                  真实
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1 shrink-0">
               <span className="text-[10px] text-on-surface-variant font-medium">
                 {freqBadge.isFlexible ? '机动' : item.timeText}

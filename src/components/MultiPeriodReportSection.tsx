@@ -5,7 +5,13 @@ import type {
   MistakeItem,
   SubjectName,
 } from '../types/study';
-import { getDefaultSubjectsForGrade, getSubjectBadgeClass } from '../utils/studyLogic';
+import {
+  calculateDeskSummary,
+  getDefaultSubjectsForGrade,
+  getSubjectBadgeClass,
+  isDemoHomeworkTask,
+  isDemoMistakeItem,
+} from '../utils/studyLogic';
 import { useDragScroll } from '../utils/useDragScroll';
 
 export type TimeDimension = 'week' | 'month' | 'quarter' | 'year';
@@ -440,9 +446,34 @@ export const MultiPeriodReportSection: React.FC<
     );
   };
 
-  // Compute dynamic rows for the selected time dimension (zeroing out demo baseline when isDemoPurged is true)
+  // Determine whether demo data has been cleared (either explicitly via isDemoPurged flag or because no demo tasks/mistakes remain)
+  const rawSummary = calculateDeskSummary(tasks, {
+    isDemoPurged,
+    mistakes,
+    examScores,
+  });
+  const effectiveDemoPurged =
+    Boolean(isDemoPurged) ||
+    (rawSummary.demoTaskCount === 0 &&
+      !mistakes.some((m) => isDemoMistakeItem(m)));
+
+  const realTimeSummary = calculateDeskSummary(tasks, {
+    isDemoPurged: effectiveDemoPurged,
+    mistakes,
+    examScores,
+  });
+
+  const activeTasksForReport = effectiveDemoPurged
+    ? tasks.filter((t) => !isDemoHomeworkTask(t))
+    : tasks;
+
+  // Compute dynamic rows for the selected time dimension (zeroing out demo baseline when effectiveDemoPurged is true)
   const subjectRows: SubjectReportRow[] = allSubjectItems.map((item) => {
-    const liveSubjTasks = tasks.filter((t) => t.subject === item.subject);
+    const liveSubjTasks = activeTasksForReport.filter((t) =>
+      item.category === 'pe'
+        ? t.subject === '体育锻炼' || t.subject === '体育'
+        : t.subject === item.subject
+    );
     const liveTaskMinutes = liveSubjTasks.reduce(
       (sum, t) => sum + (t.actualMinutes ?? t.estimatedMinutes),
       0
@@ -452,37 +483,38 @@ export const MultiPeriodReportSection: React.FC<
     const manualExtra = extraAllCorrectMap[item.subject] || 0;
 
     const liveScoreCard = examScores.find((c) => c.subject === item.subject);
-    const hasLiveScore = Boolean(liveScoreCard);
+    const hasLiveScore = Boolean(liveScoreCard && (!effectiveDemoPurged || !liveScoreCard.isDemo));
 
-    const score = liveScoreCard ? liveScoreCard.score : 0;
-    const fullScore = liveScoreCard
-      ? liveScoreCard.fullScore
-      : item.defaultFullScore;
+    const score = hasLiveScore && liveScoreCard ? liveScoreCard.score : 0;
+    const fullScore =
+      hasLiveScore && liveScoreCard
+        ? liveScoreCard.fullScore
+        : item.defaultFullScore;
     const scorePercent = hasLiveScore
       ? Math.min(100, Math.round((score / Math.max(fullScore, 1)) * 100))
-      : isDemoPurged
+      : effectiveDemoPurged
       ? 0
       : Math.min(
           100,
           Math.round((item.defaultScore / Math.max(item.defaultFullScore, 1)) * 100)
         );
 
-    const periodMinutes = isDemoPurged
+    const periodMinutes = effectiveDemoPurged
       ? liveTaskMinutes
       : item.weeklyMinutes * meta.multiplier + liveTaskMinutes;
 
-    const totalTasks = isDemoPurged
+    const totalTasks = effectiveDemoPurged
       ? liveSubjTasks.length + manualExtra
       : item.weeklyTasks * meta.multiplier + manualExtra;
 
-    const completedTasks = isDemoPurged
+    const completedTasks = effectiveDemoPurged
       ? liveCompletedCount + manualExtra
       : Math.max(
           1,
           Math.round(totalTasks * (dimension === 'week' ? 0.94 : 0.96))
         );
 
-    const allCorrectTimes = isDemoPurged
+    const allCorrectTimes = effectiveDemoPurged
       ? Math.min(totalTasks, liveAllCorrectTasks + manualExtra)
       : Math.min(
           totalTasks,
@@ -498,20 +530,34 @@ export const MultiPeriodReportSection: React.FC<
 
     let statusBadge = '稳扎稳打';
     let statusColorClass = 'bg-primary-fixed/60 text-primary';
-    if (!hasLiveScore && isDemoPurged && totalTasks === 0) {
-      statusBadge = '待录入';
-      statusColorClass = 'bg-surface-container text-on-surface-variant';
-    } else if (scorePercent >= 93 || (totalTasks > 0 && allCorrectRate >= 85)) {
+    if (!hasLiveScore && effectiveDemoPurged) {
+      if (totalTasks === 0) {
+        statusBadge = '待录入';
+        statusColorClass = 'bg-surface-container text-on-surface-variant';
+      } else if (allCorrectRate >= 85 && completedTasks > 0) {
+        statusBadge = '🏆 全对 · 待录考分';
+        statusColorClass = 'bg-secondary-container text-on-secondary-container';
+      } else {
+        statusBadge = '📝 已记作业 · 待录考分';
+        statusColorClass = 'bg-primary-fixed/50 text-primary';
+      }
+    } else if (hasLiveScore && scorePercent >= 93) {
       statusBadge = '🌟 高效领跑';
       statusColorClass = 'bg-secondary-container text-on-secondary-container';
     } else if (hasLiveScore && scorePercent < 88) {
       statusBadge = '⚡ 提分空间';
       statusColorClass = 'bg-tertiary-fixed/70 text-tertiary';
+    } else if (
+      !effectiveDemoPurged &&
+      (scorePercent >= 93 || (totalTasks > 0 && allCorrectRate >= 85))
+    ) {
+      statusBadge = '🌟 高效领跑';
+      statusColorClass = 'bg-secondary-container text-on-secondary-container';
     }
 
     const scoreText = hasLiveScore
       ? `${score}/${fullScore}`
-      : isDemoPurged
+      : effectiveDemoPurged
       ? '待录入'
       : `${item.defaultScore}/${item.defaultFullScore}`;
 
@@ -526,11 +572,13 @@ export const MultiPeriodReportSection: React.FC<
       scoreText,
       scorePercent,
       trendNote:
-        liveScoreCard?.trendText ||
-        (isDemoPurged
+        (hasLiveScore ? liveScoreCard?.trendText : undefined) ||
+        (effectiveDemoPurged
           ? totalTasks > 0
-            ? `已累计 ${periodMinutes} 分钟 · 完成 ${completedTasks}/${totalTasks} 项`
-            : '考分与作业待录入 · 录入后自动生成趋势'
+            ? `已累计 ${periodMinutes} 分钟 · 完成 ${completedTasks}/${totalTasks} 项${
+                hasLiveScore ? '' : '（考分待录入）'
+              }`
+            : '暂无作业与考分记录 · 录入后自动生成诊断'
           : item.trendNote),
       statusBadge,
       statusColorClass,
@@ -539,27 +587,26 @@ export const MultiPeriodReportSection: React.FC<
 
   // 1. Academic Homework & Preview ONLY (excludes PE and Hobby so times are strictly separated!)
   const academicRows = subjectRows.filter((r) => r.category === 'academic');
-  const academicMinutes = academicRows.reduce(
-    (sum, r) => sum + r.homeworkMinutes,
-    0
-  );
+  const academicMinutes = effectiveDemoPurged
+    ? realTimeSummary.academicMinutes
+    : academicRows.reduce((sum, r) => sum + r.homeworkMinutes, 0);
   const academicHours = (academicMinutes / 60).toFixed(1);
 
   // 2. Standalone PE Exercise time (中考体育独立统计)
   const peRow = subjectRows.find((r) => r.category === 'pe');
-  const peStandaloneMinutes = peRow
+  const peStandaloneMinutes = effectiveDemoPurged
+    ? realTimeSummary.peMinutes
+    : peRow
     ? peRow.homeworkMinutes
-    : isDemoPurged
-    ? 0
     : 105 * meta.multiplier;
   const peStandaloneHours = (peStandaloneMinutes / 60).toFixed(1);
 
   // 3. Standalone Extracurricular Hobby time (课余兴趣班独立统计)
   const hobbyRow = subjectRows.find((r) => r.category === 'hobby');
-  const hobbyStandaloneMinutes = hobbyRow
+  const hobbyStandaloneMinutes = effectiveDemoPurged
+    ? realTimeSummary.hobbyMinutes
+    : hobbyRow
     ? hobbyRow.homeworkMinutes
-    : isDemoPurged
-    ? 0
     : 165 * meta.multiplier;
   const hobbyStandaloneHours = (hobbyStandaloneMinutes / 60).toFixed(1);
 
@@ -579,7 +626,7 @@ export const MultiPeriodReportSection: React.FC<
   const academicCompletionRate =
     totalAcademicTasks > 0
       ? Math.round((totalAcademicCompleted / totalAcademicTasks) * 100)
-      : isDemoPurged
+      : effectiveDemoPurged
       ? 0
       : 95;
   const overallAllCorrectRate =
@@ -597,16 +644,17 @@ export const MultiPeriodReportSection: React.FC<
         )
       : 0;
 
-  const clearedMistakesTotal = isDemoPurged
-    ? mistakes.filter((m) => m.cleared).length
-    : meta.clearedMistakes + mistakes.filter((m) => m.cleared).length;
+  const clearedMistakesTotal = effectiveDemoPurged
+    ? realTimeSummary.clearedMistakesCount
+    : meta.clearedMistakes +
+      mistakes.filter((m) => !isDemoMistakeItem(m) && m.cleared).length;
 
-  const pomodoroTotal = isDemoPurged
-    ? tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0)
+  const pomodoroTotal = effectiveDemoPurged
+    ? realTimeSummary.completedPomodoros
     : meta.pomodoroCount +
       tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0);
 
-  const effectiveTrendPoints: TrendBarPoint[] = isDemoPurged
+  const effectiveTrendPoints: TrendBarPoint[] = effectiveDemoPurged
     ? meta.trendPoints.map((pt, idx) => {
         const isCurrentBucket = idx === meta.trendPoints.length - 1;
         return {
@@ -806,6 +854,32 @@ export const MultiPeriodReportSection: React.FC<
           ))}
         </div>
       </div>
+
+      {/* Real-time Empty State or Real Task Calculation Notice when Demo Data is Purged */}
+      {effectiveDemoPurged && (
+        <div
+          data-testid="report-realtime-status-banner"
+          className={`px-3.5 py-2.5 rounded-2xl border text-xs flex items-center justify-between flex-wrap gap-2 ${
+            realTimeSummary.isEmpty
+              ? 'bg-surface-container-low/80 border-[#EAE4DA] text-on-surface-variant'
+              : 'bg-secondary-container/30 border-secondary/25 text-on-surface'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-secondary text-[17px]">
+              {realTimeSummary.isEmpty ? 'info' : 'verified'}
+            </span>
+            <span className="font-semibold">
+              {realTimeSummary.isEmpty
+                ? realTimeSummary.emptyGuideText
+                : `已清除示范假数据 · 当前报表正根据您保留的 ${realTimeSummary.totalCount} 项真实任务（共 ${realTimeSummary.totalMinutes} 分钟）实时重算`}
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded-full bg-white text-[10px] font-bold text-secondary border border-secondary/20">
+            {realTimeSummary.isEmpty ? '空数据归零状态' : '100% 真实任务统计'}
+          </span>
+        </div>
+      )}
 
       {/* 6 KPI Summary Cards (2-column spacious grid — PE and Extracurricular Hobby strictly separated!) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

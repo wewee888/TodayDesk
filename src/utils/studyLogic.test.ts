@@ -411,5 +411,287 @@ test('computeMistakeArchiveCounts and computeDynamicEfficiencyBubbles respect is
   assert.ok(singleTaskReport.highYieldSubject.includes('22 分钟'));
   assert.equal(singleTaskReport.actionItems.length, 1);
   assert.equal(singleTaskReport.actionItems[0].minutes, 22);
+
+  // When tasks contain residual demo tasks, buildDynamicWeeklyReport strictly excludes them when isDemoPurged is true
+  const mixedReport = buildDynamicWeeklyReport({
+    studentName: '李子涵',
+    gradeClass: '初二 (3) 班',
+    tasks: [
+      {
+        id: 'task-1',
+        subject: '语文',
+        taskType: '古诗默写',
+        title: '示范任务（应被排除）',
+        estimatedMinutes: 30,
+        isDemo: true,
+        completed: false,
+      } as any,
+      {
+        id: 'task-real-math',
+        subject: '数学',
+        taskType: '作业练习',
+        title: '真实作业练习',
+        estimatedMinutes: 25,
+        isDemo: false,
+        completed: false,
+      } as any,
+    ],
+    mistakes: [
+      {
+        id: 'mis-1',
+        subject: '物理',
+        title: '示范错题（应被排除）',
+        isDemo: true,
+        cleared: false,
+      } as any,
+    ],
+    examScores: [{ subject: '英语', score: 90, fullScore: 100, isDemo: true } as any],
+    isDemoPurged: true,
+    defaultReport: emptyReport,
+  });
+  // Must count only the 1 real task (25 mins) and 0 demo mistakes
+  assert.ok(mixedReport.headline.includes('1 项任务'));
+  assert.ok(mixedReport.headline.includes('25 分钟'));
+  assert.ok(mixedReport.highYieldSubject.includes('数学'));
+  assert.ok(!mixedReport.highYieldSubject.includes('语文'));
+  assert.ok(!mixedReport.summaryParagraph.includes('物理'));
+  assert.equal(mixedReport.actionItems.length, 1);
+  assert.equal(mixedReport.actionItems[0].subject, '数学');
 });
 
+test('calculateDeskSummary accurately recalculates metrics and reports empty state when demo data is purged', () => {
+  const mixedTasks: any[] = [
+    { id: 'task-1', subject: '数学', estimatedMinutes: 25, isDemo: true, completed: true, isAllCorrect: true },
+    { id: 'task-2', subject: '英语', estimatedMinutes: 20, isDemo: true, completed: false },
+    { id: 'task-real-1', subject: '数学', estimatedMinutes: 22, actualMinutes: 22, isDemo: false, completed: true, isAllCorrect: true },
+    { id: 'task-real-pe', subject: '体育锻炼', estimatedMinutes: 15, isDemo: false, completed: true },
+    { id: 'task-real-chess', subject: '课余兴趣', estimatedMinutes: 30, isDemo: false, completed: false },
+  ];
+
+  // 1. Without isDemoPurged: all tasks counted
+  const summaryAll = calculateDeskSummary(mixedTasks);
+  assert.equal(summaryAll.totalCount, 5);
+  assert.equal(summaryAll.demoTaskCount, 2);
+  assert.equal(summaryAll.realTaskCount, 3);
+  assert.equal(summaryAll.isEmpty, false);
+
+  // 2. With isDemoPurged: true: demo tasks filtered out, only real tasks counted
+  const summaryPurged = calculateDeskSummary(mixedTasks, { isDemoPurged: true });
+  assert.equal(summaryPurged.totalCount, 3);
+  assert.equal(summaryPurged.demoTaskCount, 0);
+  assert.equal(summaryPurged.realTaskCount, 3);
+  assert.equal(summaryPurged.totalMinutes, 22 + 15 + 30);
+  assert.equal(summaryPurged.academicMinutes, 22);
+  assert.equal(summaryPurged.peMinutes, 15);
+  assert.equal(summaryPurged.hobbyMinutes, 30);
+  assert.equal(summaryPurged.allCorrectCount, 1);
+  assert.equal(summaryPurged.isEmpty, false);
+
+  // 3. When no real tasks remain after purge: clean zero state with guide text
+  const emptyPurged = calculateDeskSummary(
+    [{ id: 'task-1', subject: '数学', estimatedMinutes: 25, isDemo: true } as any],
+    { isDemoPurged: true }
+  );
+  assert.equal(emptyPurged.totalCount, 0);
+  assert.equal(emptyPurged.totalMinutes, 0);
+  assert.equal(emptyPurged.academicMinutes, 0);
+  assert.equal(emptyPurged.peMinutes, 0);
+  assert.equal(emptyPurged.hobbyMinutes, 0);
+  assert.equal(emptyPurged.isEmpty, true);
+  assert.ok(emptyPurged.emptyGuideText.includes('示范数据已全部清空'));
+});
+
+test('isDemo helper functions accurately differentiate demo items from real user items', async () => {
+  const {
+    isDemoHomeworkTask,
+    isDemoScheduleItem,
+    isDemoReviewItem,
+    isDemoMistakeItem,
+  } = await import('./studyLogic.ts');
+
+  // Demo tasks by ID or isDemo flag
+  assert.equal(isDemoHomeworkTask({ id: 'task-1', isDemo: true } as any), true);
+  assert.equal(isDemoHomeworkTask({ id: 'task-custom-1', isDemo: true } as any), true);
+  assert.equal(isDemoHomeworkTask({ id: 'task-custom-1', isDemo: false } as any), false);
+  assert.equal(isDemoHomeworkTask({ id: 'task-henry-22m' } as any), false);
+
+  // Demo schedules
+  assert.equal(isDemoScheduleItem({ id: 'sch-1' } as any), true);
+  assert.equal(isDemoScheduleItem({ id: 'sch-pe' } as any), true);
+  assert.equal(isDemoScheduleItem({ id: 'sch-custom-99' } as any), false);
+
+  // Demo reviews
+  assert.equal(isDemoReviewItem({ id: 'rev-1' } as any), true);
+  assert.equal(isDemoReviewItem({ id: 'rev-custom-1' } as any), false);
+
+  // Demo mistakes
+  assert.equal(isDemoMistakeItem({ id: 'mistake-1' } as any), true);
+  assert.equal(isDemoMistakeItem({ id: 'mistake-custom-99' } as any), false);
+});
+
+test('parseTimetableContent and formatWeeklyGridToText support Chengdu Zongbei 7.6 10-period timetable and bidirectional text conversion', async () => {
+  const {
+    ZONGBEI_7_6_REAL_TIMETABLE_TEXT,
+    formatWeeklyGridToText,
+    parseTimetableContent,
+  } = await import('./studyLogic.ts');
+
+  const res = parseTimetableContent(ZONGBEI_7_6_REAL_TIMETABLE_TEXT, '成都市棕北中学_七.6班_课表.jpg', 'grade7');
+  assert.equal(res.schoolAndClass, '成都市棕北中学 七.6');
+  assert.equal(res.weeklyGrid.length, 5);
+
+  // Monday should have 10 periods + morning reading '无'
+  const monday = res.weeklyGrid[0];
+  assert.equal(monday.day, '周一');
+  assert.equal(monday.morningReading, '无');
+  assert.equal(monday.periods.length, 10);
+  assert.equal(typeof monday.periods[0] === 'object' ? monday.periods[0].subject : monday.periods[0], '历史');
+  assert.equal(typeof monday.periods[0] === 'object' ? monday.periods[0].teacher : '', '徐倩');
+
+  // Tuesday morning reading is 英语(刘庆媛)
+  const tuesday = res.weeklyGrid[1];
+  assert.equal(tuesday.morningReading, '英语(刘庆媛)');
+
+  // Convert weekly grid back to formatted text
+  const convertedText = formatWeeklyGridToText(res.weeklyGrid, '成都市棕北中学 七.6');
+  assert.ok(convertedText.includes('成都市棕北中学 七.6'));
+  assert.ok(convertedText.includes('周一：早读：无'));
+  assert.ok(convertedText.includes('历史(徐倩)'));
+  assert.ok(convertedText.includes('周二：早读：英语(刘庆媛)'));
+
+  // Reparse converted text should yield identical periods and subjects
+  const reparsed = parseTimetableContent(convertedText, 'synced.txt', 'grade7');
+  assert.equal(reparsed.weeklyGrid[0].periods.length, 10);
+  assert.equal(reparsed.detectedSubjects.includes('语文'), true);
+  assert.equal(reparsed.detectedSubjects.includes('数学'), true);
+  assert.equal(reparsed.detectedSubjects.includes('历史'), true);
+});
+
+test('isHomeworkEligibleSubject strictly retains main academic subjects and filters out non-homework timetable items', async () => {
+  const {
+    isHomeworkEligibleSubject,
+    ZONGBEI_7_6_REAL_TIMETABLE_TEXT,
+    getTimetableSubjectsForDay,
+  } = await import('./studyLogic.ts');
+
+  // Academic homework subjects MUST be eligible
+  assert.equal(isHomeworkEligibleSubject('语文'), true);
+  assert.equal(isHomeworkEligibleSubject('数学'), true);
+  assert.equal(isHomeworkEligibleSubject('英语'), true);
+  assert.equal(isHomeworkEligibleSubject('物理'), true);
+  assert.equal(isHomeworkEligibleSubject('化学'), true);
+  assert.equal(isHomeworkEligibleSubject('生物'), true);
+  assert.equal(isHomeworkEligibleSubject('历史'), true);
+  assert.equal(isHomeworkEligibleSubject('地理'), true);
+  assert.equal(isHomeworkEligibleSubject('道德与法治'), true);
+  assert.equal(isHomeworkEligibleSubject('道法'), true);
+  assert.equal(isHomeworkEligibleSubject('政治'), true);
+  assert.equal(isHomeworkEligibleSubject('科学'), true);
+  assert.equal(isHomeworkEligibleSubject('体育锻炼'), true);
+  assert.equal(isHomeworkEligibleSubject('体育'), true);
+
+  // Non-homework courses, extension periods, and arts MUST be filtered out
+  assert.equal(isHomeworkEligibleSubject('语延'), false);
+  assert.equal(isHomeworkEligibleSubject('数延'), false);
+  assert.equal(isHomeworkEligibleSubject('英延'), false);
+  assert.equal(isHomeworkEligibleSubject('延时'), false);
+  assert.equal(isHomeworkEligibleSubject('延时辅导'), false);
+  assert.equal(isHomeworkEligibleSubject('延时75'), false);
+  assert.equal(isHomeworkEligibleSubject('延时托管'), false);
+  assert.equal(isHomeworkEligibleSubject('素质选修'), false);
+  assert.equal(isHomeworkEligibleSubject('素选75'), false);
+  assert.equal(isHomeworkEligibleSubject('书法'), false);
+  assert.equal(isHomeworkEligibleSubject('硬笔书法'), false);
+  assert.equal(isHomeworkEligibleSubject('音乐'), false);
+  assert.equal(isHomeworkEligibleSubject('美术'), false);
+  assert.equal(isHomeworkEligibleSubject('信息技术'), false);
+  assert.equal(isHomeworkEligibleSubject('信息科技'), false);
+  assert.equal(isHomeworkEligibleSubject('心理健康'), false);
+  assert.equal(isHomeworkEligibleSubject('班会'), false);
+  assert.equal(isHomeworkEligibleSubject('劳动教育'), false);
+  assert.equal(isHomeworkEligibleSubject('课余兴趣'), false);
+  assert.equal(isHomeworkEligibleSubject('自主自习'), false);
+  assert.equal(isHomeworkEligibleSubject('早读'), false);
+  assert.equal(isHomeworkEligibleSubject('午休'), false);
+
+  // Timetable recognition and daily subjects must never return non-homework subjects
+  const zongbeiParsed = parseTimetableContent(ZONGBEI_7_6_REAL_TIMETABLE_TEXT);
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('语延'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('英延'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('数延'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('延时辅导'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('书法'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('音乐'));
+  assert.ok(!zongbeiParsed.detectedSubjects.includes('美术'));
+
+  const dailySubjs = getTimetableSubjectsForDay(zongbeiParsed.weeklyGrid, '周三');
+  // Wednesday has 書法, 心理, 數延; Thursday has 音樂, 語延
+  assert.ok(!dailySubjs.todaySubjects.includes('书法'));
+  assert.ok(!dailySubjs.todaySubjects.includes('数延'));
+  assert.ok(!dailySubjs.tomorrowSubjects.includes('音乐'));
+  assert.ok(!dailySubjs.tomorrowSubjects.includes('语延'));
+});
+
+test('getSystemDateInfo, shiftDate, purgeOnlyDemoTasks, and filterTasksBySelectedDate prevent UTC day-shift and preserve user tasks', async () => {
+  const {
+    getSystemDateInfo,
+    shiftDate,
+    purgeOnlyDemoTasks,
+    filterTasksBySelectedDate,
+  } = await import('./studyLogic.ts');
+
+  const todayShifted = shiftDate(new Date(), 0);
+  const info = getSystemDateInfo(todayShifted);
+  assert.equal(info.dateStr, todayShifted);
+  assert.equal(info.isToday, true);
+
+  // Explicit YYYY-MM-DD should never shift back 1 day in negative UTC offsets
+  const explicitInfo = getSystemDateInfo('2026-10-20');
+  assert.equal(explicitInfo.dateStr, '2026-10-20');
+  assert.equal(explicitInfo.displayDate, '10月20日');
+  assert.equal(explicitInfo.weekdayName, '周二');
+
+  const tasks: HomeworkTask[] = [
+    {
+      id: 'task-1',
+      subject: '语文',
+      subjectBadgeClass: '',
+      taskType: '默写',
+      title: '示范语文任务',
+      estimatedMinutes: 30,
+      completed: false,
+      isDemo: true,
+    },
+    {
+      id: 'task-user-today',
+      subject: '数学',
+      subjectBadgeClass: '',
+      taskType: '作业练习',
+      title: '今日真实数学作业',
+      estimatedMinutes: 25,
+      completed: false,
+      taskDate: '2026-10-20',
+    },
+    {
+      id: 'task-user-yesterday',
+      subject: '英语',
+      subjectBadgeClass: '',
+      taskType: '阅读',
+      title: '昨日真实英语作业',
+      estimatedMinutes: 20,
+      completed: true,
+      taskDate: '2026-10-19',
+    },
+  ];
+
+  const remaining = purgeOnlyDemoTasks(tasks);
+  assert.equal(remaining.length, 2);
+  assert.equal(remaining.some((t) => t.id === 'task-1'), false);
+  assert.equal(remaining.some((t) => t.id === 'task-user-today'), true);
+
+  const todayFiltered = filterTasksBySelectedDate(tasks, '2026-10-20', '2026-10-20', false);
+  assert.equal(todayFiltered.length, 2); // task-1 (no taskDate -> defaults to today) + task-user-today
+  const yesterdayFiltered = filterTasksBySelectedDate(tasks, '2026-10-19', '2026-10-20', false);
+  assert.equal(yesterdayFiltered.length, 1);
+  assert.equal(yesterdayFiltered[0].id, 'task-user-yesterday');
+});

@@ -5,15 +5,14 @@ import {
   calculateDeskSummary,
   calculatePomodoroProgress,
   clampTaskDuration,
+  filterTasksBySelectedDate,
   formatPomodoroTime,
   getDefaultSubjectsForGrade,
   getSubjectBadgeClass,
   getSubjectMeta,
+  isDemoHomeworkTask,
+  isHomeworkEligibleSubject,
 } from '../utils/studyLogic';
-import {
-  playPomodoroCompleteSound,
-  playPomodoroTickStartSound,
-} from '../utils/soundEffects';
 
 interface TodayHomeworkListProps {
   tasks: HomeworkTask[];
@@ -21,6 +20,12 @@ interface TodayHomeworkListProps {
   pomodoroMinutes?: number;
   customSubjects?: SubjectName[];
   role?: 'student' | 'parent';
+  isDemoPurged?: boolean;
+  selectedDateStr?: string;
+  todayDateStr?: string;
+  selectedDateLabel?: string;
+  isSelectedToday?: boolean;
+  onResetToToday?: () => void;
   parentCheerNote?: string | null;
   onSendParentCheer?: (note: string) => void;
   onClearParentCheer?: () => void;
@@ -28,6 +33,7 @@ interface TodayHomeworkListProps {
   onSelectDuration: (id: string, minutes: number) => void;
   onUpdateTask?: (updated: HomeworkTask) => void;
   onDeleteTask?: (id: string) => void;
+  onPurgeDemoTasksOnly?: () => void;
   onClearAllTasks?: () => void;
   onRestoreDefaultTasks?: () => void;
   onOpenVoiceModal?: () => void;
@@ -77,6 +83,12 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   pomodoroMinutes = 25,
   customSubjects = [],
   role = 'student',
+  isDemoPurged = false,
+  selectedDateStr = '',
+  todayDateStr = '',
+  selectedDateLabel = '今日',
+  isSelectedToday = true,
+  onResetToToday,
   parentCheerNote,
   onSendParentCheer,
   onClearParentCheer,
@@ -84,6 +96,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   onSelectDuration,
   onUpdateTask,
   onDeleteTask,
+  onPurgeDemoTasksOnly,
   onClearAllTasks,
   onRestoreDefaultTasks,
   onOpenVoiceModal,
@@ -91,8 +104,16 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   onPomodoroComplete,
   onShowToast,
 }) => {
+  const [showAllDates, setShowAllDates] = useState<boolean>(false);
+  const displayedTasks = filterTasksBySelectedDate(
+    tasks,
+    selectedDateStr,
+    todayDateStr,
+    showAllDates || isSelectedToday
+  );
+
   const totalPomodoroSeconds = Math.max(1, pomodoroMinutes) * 60;
-  const summary = calculateDeskSummary(tasks);
+  const summary = calculateDeskSummary(displayedTasks, { isDemoPurged });
 
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(
@@ -115,7 +136,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   const availableSubjects = Array.from(
     new Set([...getDefaultSubjectsForGrade(gradeClass), ...customSubjects])
-  );
+  ).filter(isHomeworkEligibleSubject);
 
   // Calculate estimated finish time for Parent Companion View
   const now = new Date();
@@ -137,7 +158,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
         if (prev <= 1) {
           window.clearInterval(timer);
           setIsRunning(false);
-          playPomodoroCompleteSound();
+          playWarmCompletionChime();
           onPomodoroComplete(activeTaskId);
           return totalPomodoroSeconds;
         }
@@ -150,15 +171,12 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   const handleStartPomodoro = (task: HomeworkTask) => {
     if (activeTaskId === task.id) {
-      const nextRunning = !isRunning;
-      setIsRunning(nextRunning);
-      if (nextRunning) playPomodoroTickStartSound();
+      setIsRunning((prev) => !prev);
       return;
     }
     setActiveTaskId(task.id);
     setRemainingSeconds(totalPomodoroSeconds);
     setIsRunning(true);
-    playPomodoroTickStartSound();
     if (onShowToast) {
       onShowToast(
         `🍅 已开启「${task.subject}」${pomodoroMinutes}分钟专注倒计时`
@@ -174,7 +192,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   const handleFinishPomodoroNow = (task: HomeworkTask) => {
     setIsRunning(false);
     setRemainingSeconds(totalPomodoroSeconds);
-    playPomodoroCompleteSound();
+    playWarmCompletionChime();
     onPomodoroComplete(task.id);
   };
 
@@ -209,6 +227,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
       title: editTitle.trim() || task.title,
       estimatedMinutes: clampedMins,
       actualMinutes: clampedActual,
+      isDemo: false,
     };
     if (onUpdateTask) {
       onUpdateTask(updated);
@@ -217,6 +236,8 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     }
     setEditingTaskId(null);
   };
+
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   const allCorrectCount = tasks.filter(
     (t) =>
@@ -227,9 +248,6 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   const handleToggleTaskCheck = (task: HomeworkTask) => {
     const nextCompleted = !task.completed;
-    if (nextCompleted) {
-      playWarmCompletionChime();
-    }
     if (nextCompleted && task.actualMinutes === undefined) {
       const updated: HomeworkTask = {
         ...task,
@@ -266,6 +284,11 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     summary.totalCount > 0
       ? Math.round((summary.completedCount / summary.totalCount) * 100)
       : 0;
+  const remainingMinutes = displayedTasks
+    .filter((t) => !t.completed)
+    .reduce((acc, t) => acc + t.estimatedMinutes, 0);
+  const estFinishDate = new Date(Date.now() + remainingMinutes * 60_000);
+  const estFinishTimeStr = `${String(estFinishDate.getHours()).padStart(2, '0')}:${String(estFinishDate.getMinutes()).padStart(2, '0')}`;
 
   return (
     <section aria-label="今日待攻克" className="space-y-3">
@@ -376,8 +399,19 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
             target
           </span>
           <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">
-            今日待攻克
+            {isSelectedToday
+              ? '今日待攻克'
+              : `${selectedDateLabel || '指定日期'} · 书桌待办`}
           </h2>
+          {!isSelectedToday && onResetToToday && (
+            <button
+              type="button"
+              onClick={onResetToToday}
+              className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold hover:bg-primary/20 cursor-pointer transition-colors"
+            >
+              返回今天
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {allCorrectCount > 0 && (
@@ -389,25 +423,170 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
             <span className="w-2 h-2 rounded-full bg-primary-container" />
             <span data-testid="desk-summary-badge">
               {summary.totalCount} 项任务 · 预计 {summary.totalMinutes} 分钟
+              {summary.demoTaskCount > 0 && summary.realTaskCount > 0
+                ? `（真实 ${summary.realTaskCount} · 示例 ${summary.demoTaskCount}）`
+                : ''}
             </span>
           </div>
           {onClearAllTasks && tasks.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onClearAllTasks()}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-outline hover:text-error bg-surface-container-low hover:bg-error-container/20 border border-outline-variant/40 transition-colors cursor-pointer"
-              title="一键清空模拟任务，设置自己的任务"
-            >
-              <span className="material-symbols-outlined text-[13px]">
-                delete_sweep
-              </span>
-              <span>清空任务</span>
-            </button>
+            summary.demoTaskCount > 0 ? (
+              <button
+                type="button"
+                data-testid="purge-demo-only-btn"
+                onClick={() => {
+                  if (onPurgeDemoTasksOnly) {
+                    onPurgeDemoTasksOnly();
+                  } else {
+                    onClearAllTasks();
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold text-amber-800 hover:text-error bg-amber-50 hover:bg-error-container/20 border border-amber-300/60 transition-colors cursor-pointer"
+                title={
+                  summary.realTaskCount > 0
+                    ? `仅清除 ${summary.demoTaskCount} 项示例任务，100% 保留您录入的 ${summary.realTaskCount} 项真实任务`
+                    : '一键清空初始示例任务'
+                }
+              >
+                <span className="material-symbols-outlined text-[13px]">
+                  cleaning_services
+                </span>
+                <span>
+                  {summary.realTaskCount > 0
+                    ? `仅清示例 (${summary.demoTaskCount})`
+                    : '清空示例任务'}
+                </span>
+              </button>
+            ) : confirmClearAll ? (
+              <div className="inline-flex items-center gap-1 bg-error-container/30 px-2 py-0.5 rounded-full border border-error/30">
+                <span className="text-[10px] text-error font-bold">
+                  确定清空 {summary.realTaskCount} 项真实任务？
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmClearAll(false);
+                    onClearAllTasks();
+                  }}
+                  className="px-2 py-0.5 rounded-full bg-error text-on-error text-[10px] font-bold cursor-pointer"
+                >
+                  确认清空
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearAll(false)}
+                  className="px-1.5 py-0.5 rounded-full bg-white text-on-surface-variant text-[10px] font-semibold cursor-pointer"
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClearAll(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-outline hover:text-error bg-surface-container-low hover:bg-error-container/20 border border-outline-variant/40 transition-colors cursor-pointer"
+                title="清空今日任务列表（需二次确认防误删）"
+              >
+                <span className="material-symbols-outlined text-[13px]">
+                  delete_sweep
+                </span>
+                <span>清空任务</span>
+              </button>
+            )
           )}
         </div>
       </div>
 
-      {tasks.length === 0 ? (
+      {/* Progress & Estimated Finish Bar */}
+      {displayedTasks.length > 0 && (
+        <div className="p-3 rounded-2xl bg-surface-container-lowest/90 border border-[#EAE4DA] shadow-2xs space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-[11px]">
+                🎯 今日专注进度
+              </span>
+              <span className="font-semibold text-on-surface">
+                已完成 {summary.completedCount}/{summary.totalCount} 项 ({progressPercent}%)
+              </span>
+              {remainingMinutes > 0 ? (
+                <span className="text-on-surface-variant text-[11px]">
+                  · 剩余约 {remainingMinutes} 分钟（预计 {estFinishTimeStr} 收工）
+                </span>
+              ) : (
+                <span className="text-secondary font-bold text-[11px]">
+                  · 今日作业已全部攻克 🎉
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {!isSelectedToday && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllDates((prev) => !prev)}
+                  className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface text-[11px] font-medium cursor-pointer"
+                >
+                  {showAllDates ? '仅看所选日期' : '显示全部待办'}
+                </button>
+              )}
+              {onSendParentCheer && !parentCheerNote && (
+                <button
+                  type="button"
+                  data-testid="open-cheer-editor-btn"
+                  onClick={() => {
+                    setCheerInputText(
+                      '加油！做完数学和英语，妈妈给你切好了冰镇果盘 🍉✨'
+                    );
+                    setShowCheerModal(true);
+                  }}
+                  className="px-2.5 py-0.5 rounded-full bg-amber-100/80 hover:bg-amber-200/80 text-amber-900 text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                >
+                  <span>💌</span>
+                  <span>暖心便签</span>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+              style={{ width: `${Math.max(4, progressPercent)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Non-Today Date Navigation Banner */}
+      {!isSelectedToday && (
+        <div className="px-3.5 py-2.5 rounded-2xl bg-primary-fixed/40 border border-primary/20 flex items-center justify-between gap-2 flex-wrap text-xs">
+          <div className="flex items-center gap-2 text-on-surface">
+            <span className="material-symbols-outlined text-primary text-[18px]">
+              event_note
+            </span>
+            <span>
+              当前正在查看 <strong>{selectedDateLabel}</strong> 的书桌安排（此时通过 3 秒快记或语音添加的作业将自动归入该日）
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowAllDates((prev) => !prev)}
+              className="px-2.5 py-1 rounded-full bg-white text-on-surface text-[11px] font-semibold border border-[#EAE4DA] cursor-pointer"
+            >
+              {showAllDates ? '仅看该日任务' : `查看跨日待办 (${tasks.length})`}
+            </button>
+            {onResetToToday && (
+              <button
+                type="button"
+                onClick={onResetToToday}
+                className="px-2.5 py-1 rounded-full bg-primary text-on-primary text-[11px] font-bold cursor-pointer"
+              >
+                回到今天
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {displayedTasks.length === 0 ? (
         <div className="p-8 rounded-3xl bg-surface-container-lowest/90 backdrop-blur-md border border-dashed border-[#EAE4DA] text-center space-y-4 animate-fade-slide">
           <div className="w-14 h-14 mx-auto rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center">
             <span className="material-symbols-outlined text-[28px]">
@@ -416,13 +595,27 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
           </div>
           <div className="space-y-1">
             <h3 className="text-base font-bold text-on-surface">
-              书桌清爽无余粮，准备开启新征程 ✨
+              {isSelectedToday
+                ? '书桌清爽无余粮，准备开启新征程 ✨'
+                : `${selectedDateLabel || '该日期'} 暂无专门排定的作业待办 ✨`}
             </h3>
             <p className="text-xs text-on-surface-variant max-w-sm mx-auto leading-relaxed">
-              当前暂无待完成作业。您可以点击下方【按住说句话】语音口述作业，或点击【+3秒快记】快速添加，打造专属于您的自律学习清单！
+              {isSelectedToday
+                ? '当前暂无待完成作业。您可以点击下方【按住说句话】语音口述作业，或点击【+3秒快记】快速添加，打造专属于您的自律学习清单！'
+                : '您可以在右侧【3秒免打字快记】中为该日期提前规划主科作业，或点击下方按钮查看全部未完成待办。'}
             </p>
           </div>
           <div className="flex items-center justify-center gap-2.5 flex-wrap pt-1">
+            {!isSelectedToday && tasks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllDates(true)}
+                className="px-4 py-2 rounded-full bg-secondary text-on-secondary text-xs font-semibold shadow-sm cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">visibility</span>
+                <span>显示全部待办 ({tasks.length})</span>
+              </button>
+            )}
             {onOpenVoiceModal && (
               <button
                 type="button"
@@ -458,7 +651,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
-          {tasks.map((task) => {
+          {displayedTasks.map((task) => {
           const isPeTask = task.subject === '体育锻炼';
           const isHobbyTask = task.subject === '课余兴趣';
           const isAcademicHomework = !isPeTask && !isHobbyTask;
@@ -522,6 +715,23 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
                   <span className="text-xs text-on-surface-variant font-medium truncate max-w-[150px] sm:max-w-none">
                     {task.taskType}
                   </span>
+                  {isDemoHomeworkTask(task) ? (
+                    <span
+                      data-testid={`task-origin-badge-${task.id}`}
+                      className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-100/85 text-amber-800 border border-amber-300/70 shrink-0"
+                      title="系统内置示范数据 · 点击『一键清空示范数据』或『仅清示例』即可自动清理"
+                    >
+                      示例数据
+                    </span>
+                  ) : (
+                    <span
+                      data-testid={`task-origin-badge-${task.id}`}
+                      className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-secondary-container/70 text-secondary border border-secondary/30 shrink-0"
+                      title="您真实录入的专属记录 · 清空示范数据时将 100% 安全保留"
+                    >
+                      真实录入
+                    </span>
+                  )}
                   <span className="text-outline/50 text-xs">·</span>
                   <button
                     type="button"

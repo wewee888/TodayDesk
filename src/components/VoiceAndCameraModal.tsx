@@ -13,7 +13,6 @@ interface VoiceAndCameraModalProps {
     chinese: number;
   }) => void;
   onShowToast: (msg: string) => void;
-  account?: string;
 }
 
 const VOICE_PRESETS = [
@@ -28,7 +27,6 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
   onAddParsedTasks,
   onImportRecognizedScores,
   onShowToast,
-  account = 'lizihan',
 }) => {
   const [voiceInput, setVoiceInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
@@ -74,7 +72,7 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
       const formData = new FormData();
       formData.append('file', compressed.file);
       formData.append('category', cameraTab === 'board' ? 'board' : 'score');
-      formData.append('account', account);
+      formData.append('account', 'lizihan');
 
       const res = await fetch('/api/upload', {
         method: 'POST',

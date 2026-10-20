@@ -18,7 +18,7 @@ export const INITIAL_DESK_SETTINGS: DeskSettings = {
   studentName: '李子涵',
   gradeClass: '初二 (3) 班',
   pomodoroMinutes: 25,
-  customSubjects: ['科学', '信息科技'],
+  customSubjects: [],
   extracurricularActivities: DEFAULT_EXTRACURRICULAR_ACTIVITIES,
   peExercises: DEFAULT_PE_EXERCISES,
   activityConfigs: {
@@ -144,6 +144,7 @@ export const INITIAL_REVIEW_ITEMS: ReviewItem[] = [
     subjectBadgeClass: 'bg-secondary-container text-on-secondary-container',
     title: '同步练习册 P.42-43 (5-12题)',
     status: 'pending',
+    isDemo: true,
   },
   {
     id: 'rev-2',
@@ -151,6 +152,7 @@ export const INITIAL_REVIEW_ITEMS: ReviewItem[] = [
     subjectBadgeClass: 'bg-tertiary-fixed text-on-tertiary-fixed',
     title: '课时精练 Unit 4 语法单选与完形',
     status: 'pending',
+    isDemo: true,
   },
 ];
 
@@ -165,6 +167,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
     subtitle: '凹凸镜成像要点总结',
     completed: false,
     attendanceStatus: 'active',
+    isDemo: true,
   },
   {
     id: 'sch-pe',
@@ -176,6 +179,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
     subtitle: '1分钟计时跳绳3组 + 立定跳远与拉伸',
     completed: false,
     attendanceStatus: 'active',
+    isDemo: true,
   },
   {
     id: 'sch-2',
@@ -187,6 +191,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
     subtitle: '练象棋 / 练钢琴 / 练小号',
     completed: false,
     attendanceStatus: 'active',
+    isDemo: true,
   },
   {
     id: 'sch-3',
@@ -198,6 +203,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
     subtitle: '典范英语 (Level 7) 2章',
     completed: false,
     attendanceStatus: 'active',
+    isDemo: true,
   },
 ];
 
@@ -211,6 +217,7 @@ export const INITIAL_HOMEWORK_TASKS: HomeworkTask[] = [
     estimatedMinutes: 30,
     completed: false,
     completedPomodoros: 0,
+    isDemo: true,
   },
   {
     id: 'task-2',
@@ -223,6 +230,7 @@ export const INITIAL_HOMEWORK_TASKS: HomeworkTask[] = [
     completedPomodoros: 0,
     isAllCorrect: true,
     accuracyNote: '已登老师每日全对名单',
+    isDemo: true,
   },
   {
     id: 'task-3',
@@ -233,6 +241,7 @@ export const INITIAL_HOMEWORK_TASKS: HomeworkTask[] = [
     estimatedMinutes: 15,
     completed: false,
     completedPomodoros: 0,
+    isDemo: true,
   },
   {
     id: 'task-4',
@@ -243,6 +252,7 @@ export const INITIAL_HOMEWORK_TASKS: HomeworkTask[] = [
     estimatedMinutes: 20,
     completed: false,
     completedPomodoros: 0,
+    isDemo: true,
   },
 ];
 
@@ -265,6 +275,7 @@ export const INITIAL_MISTAKE_ITEMS: MistakeItem[] = [
     ctaStyle: 'secondary',
     solutionDetail:
       '【核心步骤】设 y = a(x-2)² + k，因过原点 (0,0)，故 4a + k = 0。当 a < 0 时开口向下，对称轴 x=2 在区间 [-1, 3] 内，顶点 x=2 处取最大值，离对称轴最远的 x=-1 处取最小值。注意展开平方项时负号切勿漏写！',
+    isDemo: true,
   },
   {
     id: 'mistake-2',
@@ -285,6 +296,7 @@ export const INITIAL_MISTAKE_ITEMS: MistakeItem[] = [
     ctaStyle: 'primary',
     solutionDetail:
       '【语法点拨】先行词是 the exact reason，但从句中谓语动词 explained 是及物动词，缺少宾语（explained sth. to sb.），因此关系词在从句中作宾语，填 that 或 which（而非 why）。切记先判断从句成分，再看先行词！',
+    isDemo: true,
   },
   {
     id: 'mistake-3',
@@ -304,6 +316,7 @@ export const INITIAL_MISTAKE_ITEMS: MistakeItem[] = [
     ctaStyle: 'neutral',
     solutionDetail:
       '【解题不等式】光屏上得到倒立、放大的实像，说明物距 u = 15cm 满足 f < 15cm < 2f。解此不等式组得：7.5cm < f < 15cm，因此在选项中选择 10cm 即可。',
+    isDemo: true,
   },
 ];
 

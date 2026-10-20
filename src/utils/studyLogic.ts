@@ -818,6 +818,68 @@ export function getDefaultSubjectsForGrade(gradeClass?: string): SubjectName[] {
   ];
 }
 
+/**
+ * 严格判断是否为日常家庭作业的主科学科。
+ * 每天要做的是文化课主科作业与中考体育打卡。
+ * 彻底过滤非作业类排课标签：语延、数延、英延、物延、化延、延时、延时辅导、延时75、延时托管、
+ * 素质选修、书法、硬笔书法、音乐、美术、艺术、心理健康、信息科技、信息技术、劳动、班会、自习等。
+ */
+export function isHomeworkEligibleSubject(subject: string): boolean {
+  if (!subject) return false;
+  const trimmed = subject.trim();
+  if (!trimmed) return false;
+
+  // 1. 严格排除非家庭作业类排课标签、延时辅导及艺术副科
+  const NON_HOMEWORK_KEYWORDS = [
+    '延', // 语延、数延、英延、物延、化延、延时、延时辅导、延时75、延时托管、课后延时
+    '选', // 素质选修、素选75、选修课、素选
+    '书法', // 书法、硬笔书法、毛笔书法
+    '练字', // 练字
+    '音乐', // 音乐、声乐、乐理
+    '声乐',
+    '乐理',
+    '美术', // 美术、美育
+    '美育',
+    '绘画', // 绘画
+    '艺术', // 艺术
+    '心理', // 心理健康
+    '信息', // 信息技术、信息科技、信息课
+    '电脑', // 电脑课
+    '微机', // 微机课
+    '劳动', // 劳动教育、劳动技术
+    '班会', // 班会、周会、晨会、夕会
+    '周会',
+    '晨会',
+    '夕会',
+    '自习', // 自习、自主自习、晚自习
+    '早读', // 早读
+    '午休',
+    '大课间',
+    '眼保',
+  ];
+
+  for (const kw of NON_HOMEWORK_KEYWORDS) {
+    if (trimmed.includes(kw)) {
+      return false;
+    }
+  }
+
+  // 2. 严格排除纯课余兴趣或非家庭作业类目
+  if (
+    trimmed === '课余兴趣' ||
+    trimmed === '综合实践' ||
+    trimmed === '社团活动' ||
+    trimmed === '研学实践' ||
+    trimmed === '健康教育' ||
+    trimmed === '无' ||
+    trimmed === '空'
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export const DEFAULT_SUBJECTS: SubjectName[] = [
   '数学',
   '语文',
@@ -828,28 +890,23 @@ export const DEFAULT_SUBJECTS: SubjectName[] = [
   '历史',
   '道法',
   '地理',
-  '信息科技',
   '体育锻炼',
-  '课余兴趣',
-  '自主自习',
 ];
 
 export const RECOMMENDED_EXTRA_SUBJECTS: SubjectName[] = [
   '科学',
-  '信息科技',
-  '通用技术',
   '政治',
   '思想政治',
-  '音乐',
-  '美术',
-  '书法',
-  '心理健康',
-  '劳动教育',
-  '综合实践',
+  '地理',
+  '生物',
+  '历史',
+  '物理',
+  '化学',
   '奥数',
-  '科创',
   '日语',
   '俄语',
+  '法语',
+  '德语',
 ];
 
 export function getSubjectBadgeClass(subject: SubjectName): string {
@@ -1165,25 +1222,192 @@ export function clampTaskDuration(minutes: number): number {
   return Math.min(Math.max(Math.round(minutes), 5), 240);
 }
 
-export function calculateDeskSummary(tasks: HomeworkTask[]): {
+export const DEMO_HOMEWORK_TASK_IDS = new Set([
+  'task-1',
+  'task-2',
+  'task-3',
+  'task-4',
+]);
+export const DEMO_SCHEDULE_IDS = new Set([
+  'sch-1',
+  'sch-pe',
+  'sch-2',
+  'sch-3',
+]);
+export const DEMO_REVIEW_IDS = new Set(['rev-1', 'rev-2']);
+export const DEMO_MISTAKE_IDS = new Set(['mistake-1', 'mistake-2', 'mistake-3']);
+
+export function isDemoHomeworkTask(
+  task: Pick<HomeworkTask, 'id' | 'isDemo'>
+): boolean {
+  if (task.isDemo === false) return false;
+  return Boolean(task.isDemo || DEMO_HOMEWORK_TASK_IDS.has(task.id));
+}
+
+export function isDemoScheduleItem(item: {
+  id: string;
+  isDemo?: boolean;
+}): boolean {
+  if (item.isDemo === false) return false;
+  return Boolean(item.isDemo || DEMO_SCHEDULE_IDS.has(item.id));
+}
+
+export function isDemoReviewItem(item: {
+  id: string;
+  isDemo?: boolean;
+}): boolean {
+  if (item.isDemo === false) return false;
+  return Boolean(item.isDemo || DEMO_REVIEW_IDS.has(item.id));
+}
+
+export function isDemoMistakeItem(item: {
+  id: string;
+  isDemo?: boolean;
+}): boolean {
+  if (item.isDemo === false) return false;
+  return Boolean(item.isDemo || DEMO_MISTAKE_IDS.has(item.id));
+}
+
+export interface DeskSummaryMetrics {
   totalCount: number;
   completedCount: number;
   remainingCount: number;
   totalMinutes: number;
   completedMinutes: number;
   remainingMinutes: number;
-} {
-  const totalCount = tasks.length;
-  const completedTasks = tasks.filter((t) => t.completed);
+  realTaskCount: number;
+  demoTaskCount: number;
+  academicCount: number;
+  academicCompletedCount: number;
+  academicCompletionRate: number;
+  academicMinutes: number;
+  academicHours: string;
+  peCount: number;
+  peCompletedCount: number;
+  peMinutes: number;
+  peHours: string;
+  hobbyCount: number;
+  hobbyCompletedCount: number;
+  hobbyMinutes: number;
+  hobbyHours: string;
+  allCorrectCount: number;
+  allCorrectRate: number;
+  completedPomodoros: number;
+  clearedMistakesCount: number;
+  avgScorePercent: number;
+  isEmpty: boolean;
+  emptyGuideText: string;
+}
+
+export function calculateDeskSummary(
+  tasks: HomeworkTask[],
+  options?: {
+    isDemoPurged?: boolean;
+    mistakes?: MistakeItem[];
+    examScores?: ExamScoreCard[];
+  }
+): DeskSummaryMetrics {
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const demoTaskCount = safeTasks.filter((t) => isDemoHomeworkTask(t)).length;
+  const realTaskCount = safeTasks.length - demoTaskCount;
+
+  // When demo data is purged, strictly exclude any residual demo tasks so only real tasks are counted
+  const activeTasks = options?.isDemoPurged
+    ? safeTasks.filter((t) => !isDemoHomeworkTask(t))
+    : safeTasks;
+
+  const totalCount = activeTasks.length;
+  const completedTasks = activeTasks.filter((t) => t.completed);
   const completedCount = completedTasks.length;
   const remainingCount = totalCount - completedCount;
 
-  const totalMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
-  const completedMinutes = completedTasks.reduce(
-    (sum, t) => sum + t.estimatedMinutes,
+  const getTaskMinutes = (t: HomeworkTask) =>
+    t.actualMinutes ?? t.estimatedMinutes ?? 0;
+
+  const totalMinutes = activeTasks.reduce(
+    (sum, t) => sum + getTaskMinutes(t),
     0
   );
-  const remainingMinutes = totalMinutes - completedMinutes;
+  const completedMinutes = completedTasks.reduce(
+    (sum, t) => sum + getTaskMinutes(t),
+    0
+  );
+  const remainingMinutes = Math.max(0, totalMinutes - completedMinutes);
+
+  const peTasks = activeTasks.filter(
+    (t) => t.subject === '体育锻炼' || t.subject === '体育'
+  );
+  const hobbyTasks = activeTasks.filter((t) => t.subject === '课余兴趣');
+  const academicTasks = activeTasks.filter(
+    (t) =>
+      t.subject !== '体育锻炼' &&
+      t.subject !== '体育' &&
+      t.subject !== '课余兴趣'
+  );
+
+  const academicCount = academicTasks.length;
+  const academicCompletedCount = academicTasks.filter((t) => t.completed).length;
+  const academicCompletionRate =
+    academicCount > 0
+      ? Math.round((academicCompletedCount / academicCount) * 100)
+      : 0;
+  const academicMinutes = academicTasks.reduce(
+    (sum, t) => sum + getTaskMinutes(t),
+    0
+  );
+  const academicHours = (academicMinutes / 60).toFixed(1);
+
+  const peCount = peTasks.length;
+  const peCompletedCount = peTasks.filter((t) => t.completed).length;
+  const peMinutes = peTasks.reduce((sum, t) => sum + getTaskMinutes(t), 0);
+  const peHours = (peMinutes / 60).toFixed(1);
+
+  const hobbyCount = hobbyTasks.length;
+  const hobbyCompletedCount = hobbyTasks.filter((t) => t.completed).length;
+  const hobbyMinutes = hobbyTasks.reduce((sum, t) => sum + getTaskMinutes(t), 0);
+  const hobbyHours = (hobbyMinutes / 60).toFixed(1);
+
+  const allCorrectCount = academicTasks.filter((t) => t.isAllCorrect).length;
+  const allCorrectRate =
+    academicCount > 0
+      ? Math.min(100, Math.round((allCorrectCount / academicCount) * 100))
+      : 0;
+
+  const completedPomodoros = activeTasks.reduce(
+    (sum, t) => sum + (t.completedPomodoros || 0),
+    0
+  );
+
+  const activeMistakes = Array.isArray(options?.mistakes)
+    ? options?.isDemoPurged
+      ? options.mistakes.filter((m) => !isDemoMistakeItem(m))
+      : options.mistakes
+    : [];
+  const clearedMistakesCount = activeMistakes.filter((m) => m.cleared).length;
+
+  const activeScores = Array.isArray(options?.examScores)
+    ? options?.isDemoPurged
+      ? options.examScores.filter((s) => !s.isDemo)
+      : options.examScores
+    : [];
+  const avgScorePercent =
+    activeScores.length > 0
+      ? Math.round(
+          activeScores.reduce(
+            (sum, s) =>
+              sum +
+              Math.min(100, Math.round((s.score / Math.max(s.fullScore, 1)) * 100)),
+            0
+          ) / activeScores.length
+        )
+      : 0;
+
+  const isEmpty = totalCount === 0;
+  const emptyGuideText = isEmpty
+    ? options?.isDemoPurged
+      ? '示范数据已全部清空 · 暂无作业与打卡记录。在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算'
+      : '暂无作业与打卡记录 · 在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算'
+    : '';
 
   return {
     totalCount,
@@ -1192,6 +1416,28 @@ export function calculateDeskSummary(tasks: HomeworkTask[]): {
     totalMinutes,
     completedMinutes,
     remainingMinutes,
+    realTaskCount: options?.isDemoPurged ? totalCount : realTaskCount,
+    demoTaskCount: options?.isDemoPurged ? 0 : demoTaskCount,
+    academicCount,
+    academicCompletedCount,
+    academicCompletionRate,
+    academicMinutes,
+    academicHours,
+    peCount,
+    peCompletedCount,
+    peMinutes,
+    peHours,
+    hobbyCount,
+    hobbyCompletedCount,
+    hobbyMinutes,
+    hobbyHours,
+    allCorrectCount,
+    allCorrectRate,
+    completedPomodoros,
+    clearedMistakesCount,
+    avgScorePercent,
+    isEmpty,
+    emptyGuideText,
   };
 }
 
@@ -1503,9 +1749,9 @@ const KNOWN_TIMETABLE_SUBJECTS: {
   { keyword: '写作', normalized: '作文', isAcademic: true },
   { keyword: '作文', normalized: '作文', isAcademic: true },
   { keyword: '延时', normalized: '延时辅导', isAcademic: false },
-  { keyword: '语延', normalized: '语延', isAcademic: true },
-  { keyword: '数延', normalized: '数延', isAcademic: true },
-  { keyword: '英延', normalized: '英延', isAcademic: true },
+  { keyword: '语延', normalized: '语延', isAcademic: false },
+  { keyword: '数延', normalized: '数延', isAcademic: false },
+  { keyword: '英延', normalized: '英延', isAcademic: false },
 ];
 
 /**
@@ -1528,7 +1774,7 @@ export function extractOrderedSubjectsFromSegment(
   const results: { subject: SubjectName; teacher?: string; isAcademic: boolean }[] = [];
 
   for (const token of rawTokens) {
-    // Check "科目(老师)" pattern like "历史(徐倩)"
+    // Check "科目(老师)" pattern like "历史(徐倩)" or "道德与法治(陈姝)"
     const tMatch = token.match(/^([^(（]+)[(（]([^)）]+)[)）]$/);
     if (tMatch) {
       const rawSubj = tMatch[1].trim();
@@ -1536,8 +1782,31 @@ export function extractOrderedSubjectsFromSegment(
       const matched = KNOWN_TIMETABLE_SUBJECTS.find((k) =>
         rawSubj.includes(k.keyword)
       );
+      // Preserve exact curriculum cell label when teacher is attached (e.g. 体育, 体锻, 延时, 自习, 信息技术, 道德与法治)
+      const preserveRawSet = new Set([
+        '道德与法治',
+        '信息技术',
+        '体育',
+        '体锻',
+        '延时',
+        '自习',
+        '语延',
+        '数延',
+        '英延',
+        '素质选修',
+        '心理健康',
+        '书法',
+        '音乐',
+        '美术',
+        '班会',
+      ]);
+      const finalSubj = preserveRawSet.has(rawSubj)
+        ? rawSubj
+        : matched
+        ? matched.normalized
+        : rawSubj;
       results.push({
-        subject: matched ? matched.normalized : rawSubj,
+        subject: finalSubj,
         teacher,
         isAcademic: matched ? matched.isAcademic : true,
       });
@@ -1583,6 +1852,37 @@ export function extractOrderedSubjectsFromSegment(
   }
 
   return results;
+}
+
+export const ZONGBEI_7_6_REAL_TIMETABLE_TEXT =
+  '成都市棕北中学 七.6 课程表\n' +
+  '周一：早读：无、历史(徐倩)、语文(何川)、英语(刘庆媛)、数学(付晓玲)、数学(付晓玲)、语延(何川)、体育(王剑豪)、英延(刘庆媛)、地理(王馨墨)、信息技术(李佳欣)\n' +
+  '周二：早读：英语(刘庆媛)、语文(何川)、语文(何川)、道德与法治(陈姝)、数学(付晓玲)、数延(付晓玲)、英语(刘庆媛)、英语(刘庆媛)、体育(王剑豪)、延时(延时75)、延时(延时75)\n' +
+  '周三：早读：语文(何川)、英语(刘庆媛)、英语(刘庆媛)、语文(何川)、数学(付晓玲)、生物(谢林言)、书法(何川)、心理健康(鲁科)、数延(付晓玲)、体育(王剑豪)、道德与法治(陈姝)\n' +
+  '周四：早读：英语(刘庆媛)、英语(刘庆媛)、数学(付晓玲)、地理(王馨墨)、数学(付晓玲)、音乐(康莉)、生物(谢林言)、语延(何川)、历史(徐倩)、自习(刘庆媛)、体锻(刘庆媛)\n' +
+  '周五：早读：语文(何川)、英语(刘庆媛)、语文(何川)、数学(付晓玲)、语文(何川)、体育(王剑豪)、美术(谢振铭)、英延(刘庆媛)、班会(刘庆媛)、素质选修(素选75)、素质选修(素选75)';
+
+export function formatWeeklyGridToText(
+  weeklyGrid: TimetableDaySchedule[],
+  schoolAndClass?: string
+): string {
+  const header = schoolAndClass ? `${schoolAndClass} 课程表\n` : '';
+  const dayLines = (weeklyGrid || []).map((col) => {
+    const dayLabel = col.day || col.dayName || '周一';
+    const morningPart = col.morningReading
+      ? `早读：${col.morningReading}`
+      : '';
+    const periodParts = (col.periods || [])
+      .map((p) => {
+        if (typeof p === 'string') return p;
+        if (!p.subject) return '';
+        return p.teacher ? `${p.subject}(${p.teacher})` : p.subject;
+      })
+      .filter(Boolean);
+    const allParts = [morningPart, ...periodParts].filter(Boolean);
+    return `${dayLabel}：${allParts.join('、')}`;
+  });
+  return header + dayLines.join('\n');
 }
 
 export function parseTimetableContent(
@@ -1643,13 +1943,27 @@ export function parseTimetableContent(
       let restContent = match[2].trim();
       let morning = '';
 
-      // Extract optional morning reading prefix e.g. "早读：英语" or "早读(语文)" or "早读语文"
-      const morningMatch = restContent.match(
-        /^早读[：:(\s（]*([语数英文政史地生道法]+)?[)）]?[、,，\s]*(.*)/
+      // Extract optional morning reading prefix:
+      // Case 1: "早读：英语(刘庆媛)、..." or "早读：无、..."
+      const colonMorningMatch = restContent.match(
+        /^早读[：:]\s*([^、,，;；/｜|]+)[、,，;；/｜|\s]*(.*)/
       );
-      if (morningMatch) {
-        morning = morningMatch[1]?.trim() || '早读';
-        restContent = morningMatch[2] || '';
+      if (colonMorningMatch) {
+        const rawMorning = colonMorningMatch[1].trim();
+        morning =
+          rawMorning === '空' || rawMorning === '—'
+            ? ''
+            : rawMorning;
+        restContent = colonMorningMatch[2] || '';
+      } else {
+        // Case 2: "早读英语 数学..." or "早读(语文) 数学..."
+        const simpleMorningMatch = restContent.match(
+          /^早读[：:(\s（]*([语数英文政史地生道法]+)?[)）]?[、,，\s]*(.*)/
+        );
+        if (simpleMorningMatch) {
+          morning = simpleMorningMatch[1]?.trim() || '早读';
+          restContent = simpleMorningMatch[2] || '';
+        }
       }
 
       const extracted = extractOrderedSubjectsFromSegment(restContent);
@@ -1657,10 +1971,14 @@ export function parseTimetableContent(
       let pIdx = 1;
 
       for (const entry of extracted) {
+        const matchedCatalog = KNOWN_TIMETABLE_SUBJECTS.find(
+          (k) => k.keyword === entry.subject || k.normalized === entry.subject
+        );
+        const normSubj = matchedCatalog ? matchedCatalog.normalized : entry.subject;
         if (entry.isAcademic) {
-          detectedAcademic.add(entry.subject);
+          detectedAcademic.add(normSubj);
         } else {
-          detectedExtra.add(entry.subject);
+          detectedExtra.add(normSubj);
         }
         parsedPeriods.push({
           periodIndex: pIdx++,
@@ -1761,11 +2079,15 @@ export function parseTimetableContent(
     );
   }
 
-  const academicSubjects = Array.from(detectedAcademic);
-  const extraSubjects = Array.from(detectedExtra);
+  const academicSubjects = Array.from(detectedAcademic).filter(
+    isHomeworkEligibleSubject
+  );
+  const extraSubjects = Array.from(detectedExtra).filter(
+    isHomeworkEligibleSubject
+  );
   const detectedSubjects = Array.from(
     new Set([...academicSubjects, ...extraSubjects])
-  );
+  ).filter(isHomeworkEligibleSubject);
 
   let weeklyGrid: TimetableDaySchedule[] = [];
 
@@ -1801,10 +2123,20 @@ export function parseTimetableContent(
     });
   }
 
+  const firstLine = lines[0] || '';
+  const customHeaderMatch =
+    firstLine &&
+    !/^(?:📅\s*)?(周[一二三四五]|星期[一二三四五]|第\s*[一二三四五六七八九十\d]+\s*[节课]|早读)/.test(
+      firstLine
+    )
+      ? firstLine.replace(/\s*课程表$/, '').trim()
+      : '';
+
   const schoolAndClass =
-    text.includes('棕北中学') || sourceName.includes('棕北中学')
+    customHeaderMatch ||
+    (text.includes('棕北中学') || sourceName.includes('棕北中学')
       ? '成都市棕北中学 七.6'
-      : undefined;
+      : undefined);
 
   const semesterLabel =
     gradePreset === 'grade7'
@@ -1820,6 +2152,7 @@ export function parseTimetableContent(
     academicSubjects,
     extraSubjects,
     weeklyGrid,
+    rawText: text,
     sourceName,
   };
 }
@@ -1914,6 +2247,18 @@ export function toggleTaskTeacherAllCorrect(
   };
 }
 
+function parseLocalDateInput(dateInput?: string | Date): Date {
+  if (!dateInput) return new Date();
+  if (typeof dateInput === 'string') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateInput.trim());
+    if (match) {
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    }
+    return new Date(dateInput);
+  }
+  return new Date(dateInput.getTime());
+}
+
 /**
  * Returns real dynamic date info with teaching week calculation
  */
@@ -1927,11 +2272,7 @@ export function getSystemDateInfo(dateInput?: string | Date): {
   weekNumber: number; // e.g. 8 (alias for teachingWeek)
   isToday: boolean;
 } {
-  const d = dateInput
-    ? typeof dateInput === 'string'
-      ? new Date(dateInput)
-      : new Date(dateInput.getTime())
-    : new Date();
+  const d = parseLocalDateInput(dateInput);
   const year = d.getFullYear();
   const month = d.getMonth() + 1;
   const day = d.getDate();
@@ -1977,15 +2318,36 @@ export function getSystemDateInfo(dateInput?: string | Date): {
 }
 
 export function shiftDate(dateInput: string | Date, offsetDays: number): string {
-  const d =
-    typeof dateInput === 'string'
-      ? new Date(dateInput)
-      : new Date(dateInput.getTime());
+  const d = parseLocalDateInput(dateInput);
   d.setDate(d.getDate() + offsetDays);
   const year = d.getFullYear();
   const month = d.getMonth() + 1;
   const day = d.getDate();
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Removes only demo tasks and preserves 100% of user-created real tasks
+ */
+export function purgeOnlyDemoTasks(tasks: HomeworkTask[]): HomeworkTask[] {
+  return tasks.filter((t) => !isDemoHomeworkTask(t));
+}
+
+/**
+ * Filters tasks by the selected date on the desk calendar bar.
+ * Tasks without an explicit taskDate belong to todayDateStr by default.
+ */
+export function filterTasksBySelectedDate(
+  tasks: HomeworkTask[],
+  selectedDateStr: string,
+  todayDateStr: string,
+  showAllDates = false
+): HomeworkTask[] {
+  if (showAllDates || !selectedDateStr) return tasks;
+  return tasks.filter((t) => {
+    const effectiveDate = t.taskDate || todayDateStr;
+    return effectiveDate === selectedDateStr;
+  });
 }
 
 export function getTimetableSubjectsForDay(
@@ -2022,7 +2384,7 @@ export function getTimetableSubjectsForDay(
       if (
         name &&
         !list.includes(name) &&
-        !['班会', '自习', '午休', '延时', '素质选修'].includes(name)
+        isHomeworkEligibleSubject(name)
       ) {
         list.push(name);
       }
@@ -2169,13 +2531,28 @@ export function buildDynamicWeeklyReport(params: {
     defaultReport,
   } = params;
 
-  const allCorrectSummary = computeTeacherAllCorrectSyncSummary(tasks);
-  const activeMistakes = mistakes.filter((m) => !m.cleared);
-  const totalMinutes = tasks.reduce(
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const safeMistakes = Array.isArray(mistakes) ? mistakes : [];
+  const safeExamScores = Array.isArray(examScores) ? examScores : [];
+
+  // When demo data is purged, strictly exclude any demo tasks, demo mistakes, and demo exam scores
+  const activeTasks = isDemoPurged
+    ? safeTasks.filter((t) => !isDemoHomeworkTask(t))
+    : safeTasks;
+  const activeMistakes = isDemoPurged
+    ? safeMistakes.filter((m) => !isDemoMistakeItem(m))
+    : safeMistakes;
+  const activeScores = isDemoPurged
+    ? safeExamScores.filter((s) => !s.isDemo)
+    : safeExamScores;
+
+  const allCorrectSummary = computeTeacherAllCorrectSyncSummary(activeTasks);
+  const unclearedMistakes = activeMistakes.filter((m) => !m.cleared);
+  const totalMinutes = activeTasks.reduce(
     (sum, t) => sum + (t.actualMinutes ?? t.estimatedMinutes),
     0
   );
-  const completedCount = tasks.filter((t) => t.completed).length;
+  const completedCount = activeTasks.filter((t) => t.completed).length;
 
   // If demo data is NOT purged and default demo items are still active, return default report enriched with real teacher verification count
   if (!isDemoPurged) {
@@ -2192,16 +2569,20 @@ export function buildDynamicWeeklyReport(params: {
     };
   }
 
-  // Demo data is purged (or clean new user account): compute 100% from real tasks, mistakes, and examScores!
-  if (tasks.length === 0 && mistakes.length === 0 && examScores.length === 0) {
+  // Demo data is purged (or clean new user account): strictly compute 100% from real tasks, mistakes, and examScores!
+  if (
+    activeTasks.length === 0 &&
+    activeMistakes.length === 0 &&
+    activeScores.length === 0
+  ) {
     return {
       studentName: `${studentName} · ${gradeClass}`,
       weekLabel: '家庭学情与周末清账单 · 真实记录模式',
       headline: `${studentName}的专属书桌已就绪 · 录入第一项作业即可生成学情周报 🌱`,
       summaryParagraph:
-        '当前示范数据已清空，暂未产生本周学习与错题记录。平时在「今日书桌」记录作业时长、勾选「老师核对：全对」或收录错题后，系统将根据您的真实数据实时计算学科投产比与周末靶向清账单。',
-      highYieldSubject: '待开启记录（录入作业或考分后自动诊断）',
-      potentialSubject: '待开启记录（收录错题或作业后自动识别）',
+        '当前示范数据已彻底清空，暂未产生本周学习与错题记录。平时在「今日书桌」记录作业时长、勾选「老师核对：全对」或收录错题后，系统将 100% 根据您的真实数据实时计算学科投产比与周末靶向清账单。',
+      highYieldSubject: '待开启记录（录入真实作业后自动统计）',
+      potentialSubject: '待开启记录（收录错题后自动定位）',
       encouragement:
         '好的习惯始于每天 3 秒钟的轻快记录，不焦虑、不盲刷，每一步都算数！',
       actionItems: [],
@@ -2210,7 +2591,7 @@ export function buildDynamicWeeklyReport(params: {
 
   // Group real task minutes by subject
   const subjectMinutesMap = new Map<SubjectName, number>();
-  for (const t of tasks) {
+  for (const t of activeTasks) {
     const mins = t.actualMinutes ?? t.estimatedMinutes;
     subjectMinutesMap.set(
       t.subject,
@@ -2228,19 +2609,19 @@ export function buildDynamicWeeklyReport(params: {
           ? ' · 老师核对全对 ✓'
           : ''
       }）`
-    : examScores[0]
-    ? `${examScores[0].subject}（考分 ${examScores[0].score}/${examScores[0].fullScore}）`
+    : activeScores[0]
+    ? `${activeScores[0].subject}（考分 ${activeScores[0].score}/${activeScores[0].fullScore}）`
     : '稳步积累中';
 
   const potentialSubjText =
-    activeMistakes.length > 0
-      ? `${activeMistakes[0].subject}（待清账错题 ${activeMistakes.length} 道）`
+    unclearedMistakes.length > 0
+      ? `${unclearedMistakes[0].subject}（待清账错题 ${unclearedMistakes.length} 道）`
       : sortedSubjects.length > 1
       ? `${sortedSubjects[sortedSubjects.length - 1][0]}（建议周末适度巩固）`
       : '保持每日全对核对与错题收录即可';
 
   const actionItems: WeeklyReportAI['actionItems'] = [];
-  for (const m of activeMistakes.slice(0, 3)) {
+  for (const m of unclearedMistakes.slice(0, 3)) {
     actionItems.push({
       subject: m.subject,
       task: `重做错题：${m.title}（${m.reasonText}）`,
@@ -2248,7 +2629,7 @@ export function buildDynamicWeeklyReport(params: {
       priority: '必清',
     });
   }
-  for (const t of tasks.filter((item) => !item.completed).slice(0, 3 - actionItems.length)) {
+  for (const t of activeTasks.filter((item) => !item.completed).slice(0, 3 - actionItems.length)) {
     actionItems.push({
       subject: t.subject,
       task: `完成待办：${t.title}`,
@@ -2268,12 +2649,12 @@ export function buildDynamicWeeklyReport(params: {
   return {
     studentName: `${studentName} · ${gradeClass}`,
     weekLabel: '家庭学情与周末清账单 · 真实数据汇总',
-    headline: `${studentName}本周已真实记录 ${tasks.length} 项任务（共 ${totalMinutes} 分钟） ✨`,
-    summaryParagraph: `${studentName}本周书桌共记录 ${tasks.length} 项真实任务（已完成 ${completedCount}/${tasks.length} 项，累计 ${totalMinutes} 分钟${
+    headline: `${studentName}本周已真实记录 ${activeTasks.length} 项任务（共 ${totalMinutes} 分钟） ✨`,
+    summaryParagraph: `${studentName}本周书桌共记录 ${activeTasks.length} 项真实任务（已完成 ${completedCount}/${activeTasks.length} 项，累计 ${totalMinutes} 分钟${
       allCorrectSummary.allCorrectCount > 0
         ? `，其中 ${allCorrectSummary.allCorrectCount} 项获老师核对全对，全对率 ${allCorrectSummary.allCorrectRate}%`
         : ''
-    }），当前错题本待清账 ${activeMistakes.length} 道。系统已根据您的真实记录生成周末清账建议。`,
+    }），当前错题本待清账 ${unclearedMistakes.length} 道。系统已根据您的真实记录生成周末清账建议。`,
     highYieldSubject: topHighYieldText,
     potentialSubject: potentialSubjText,
     encouragement:

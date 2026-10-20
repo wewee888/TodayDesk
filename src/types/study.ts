@@ -39,6 +39,7 @@ export interface ReviewItem {
   status: 'pending' | 'all_correct' | 'fixed_minor' | 'weekend_review';
   mistakeTag?: '计算粗心' | '审题漏看' | '概念模糊';
   hasPhoto?: boolean;
+  isDemo?: boolean;
 }
 
 export interface ScheduleItem {
@@ -52,6 +53,7 @@ export interface ScheduleItem {
   completed: boolean;
   attendanceStatus?: AttendanceStatus;
   leaveNote?: string;
+  isDemo?: boolean;
 }
 
 export interface HomeworkTask {
@@ -67,6 +69,7 @@ export interface HomeworkTask {
   isAllCorrect?: boolean;
   accuracyNote?: string;
   taskDate?: string;
+  isDemo?: boolean;
 }
 
 export interface MistakeItem {
@@ -87,6 +90,7 @@ export interface MistakeItem {
   ctaLabel: string;
   ctaStyle: 'secondary' | 'primary' | 'neutral';
   solutionDetail: string;
+  isDemo?: boolean;
 }
 
 export type ExamPeriod = string;
@@ -118,6 +122,7 @@ export interface TimetableRecognitionResult {
   subjectTeachers?: Record<SubjectName, string>;
   weeklyGrid: TimetableDaySchedule[];
   extractedRawText?: string;
+  rawText?: string;
   sourceName: string;
 }
 
@@ -131,6 +136,7 @@ export interface ExamScoreCard {
   trendText: string;
   trendIcon: string;
   colorScheme: 'primary' | 'secondary' | 'tertiary';
+  isDemo?: boolean;
 }
 
 export interface EfficiencyBubble {

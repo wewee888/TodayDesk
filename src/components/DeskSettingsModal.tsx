@@ -15,6 +15,7 @@ import {
   getDefaultSubjectsForGrade,
   getScheduleFrequencyBadge,
   getSubjectBadgeClass,
+  isHomeworkEligibleSubject,
 } from '../utils/studyLogic';
 
 interface DeskSettingsModalProps {
@@ -194,7 +195,7 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
       ...getDefaultSubjectsForGrade(settings.gradeClass),
       ...(settings.customSubjects || []),
     ])
-  );
+  ).filter(isHomeworkEligibleSubject);
 
   const getItemConfig = (
     name: string,
@@ -471,16 +472,23 @@ export const DeskSettingsModal: React.FC<DeskSettingsModalProps> = ({
   const handleAddCustomSubject = (subjName: string) => {
     const trimmed = subjName.trim();
     if (!trimmed) return;
+    if (!isHomeworkEligibleSubject(trimmed)) {
+      onShowToast(
+        `「${trimmed}」属于非作业类排课标签，学科库专为主科作业设计，无需录入此类副科`
+      );
+      setNewSubjectInput('');
+      return;
+    }
     if (allAvailableSubjects.includes(trimmed)) {
       onShowToast(`学科「${trimmed}」已存在`);
       return;
     }
     onUpdateSettings({
       ...settings,
-      customSubjects: [...(settings.customSubjects || []), trimmed],
+      customSubjects: [...(settings.customSubjects || []).filter(isHomeworkEligibleSubject), trimmed],
     });
     setNewSubjectInput('');
-    onShowToast(`已新增自定义学科：「${trimmed}」📚`);
+    onShowToast(`已新增自定义主科学科：「${trimmed}」📚`);
   };
 
   const handleConfirmRenameSubject = (oldSubj: SubjectName) => {

@@ -4,6 +4,7 @@ import {
   getDefaultSubjectsForGrade,
   getSubjectBadgeClass,
   getSubjectMeta,
+  isDemoHomeworkTask,
 } from '../utils/studyLogic';
 
 interface DailyHomeworkPeLedgerSectionProps {
@@ -972,17 +973,36 @@ export const DailyHomeworkPeLedgerSection: React.FC<
 
                     {/* Col 2: Subject Badge */}
                     <td className="py-2.5 px-3 whitespace-nowrap">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 ${
-                          task.subjectBadgeClass ||
-                          getSubjectMeta(task.subject).badgeClass
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[13px]">
-                          {getSubjectMeta(task.subject).icon}
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 ${
+                            task.subjectBadgeClass ||
+                            getSubjectMeta(task.subject).badgeClass
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[13px]">
+                            {getSubjectMeta(task.subject).icon}
+                          </span>
+                          <span>{task.subject}</span>
                         </span>
-                        <span>{task.subject}</span>
-                      </span>
+                        {isDemoHomeworkTask(task) ? (
+                          <span
+                            data-testid={`ledger-demo-${task.id}`}
+                            className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0"
+                            title="示范数据"
+                          >
+                            示例
+                          </span>
+                        ) : (
+                          <span
+                            data-testid={`ledger-real-${task.id}`}
+                            className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-secondary-container/70 text-secondary border border-secondary/30 shrink-0"
+                            title="真实记录"
+                          >
+                            真实
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Col 3: Title & Type */}
