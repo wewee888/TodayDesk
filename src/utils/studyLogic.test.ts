@@ -695,3 +695,36 @@ test('getSystemDateInfo, shiftDate, purgeOnlyDemoTasks, and filterTasksBySelecte
   assert.equal(yesterdayFiltered.length, 1);
   assert.equal(yesterdayFiltered[0].id, 'task-user-yesterday');
 });
+
+test('calculateDeskSummary forcefully returns zero-value object with 暂无数据 when data source is empty or demo data is purged', () => {
+  // 1. Empty array (e.g. empty localStorage or empty D1 sync data) even if residual mistakes/scores are passed
+  const zeroFromEmpty = calculateDeskSummary([], {
+    mistakes: [{ id: 'm1', cleared: true, isDemo: true } as any],
+    examScores: [{ subject: '数学', score: 115, fullScore: 120, isDemo: true } as any],
+  });
+  assert.equal(zeroFromEmpty.totalCount, 0);
+  assert.equal(zeroFromEmpty.totalMinutes, 0);
+  assert.equal(zeroFromEmpty.academicHours, '0.0');
+  assert.equal(zeroFromEmpty.peHours, '0.0');
+  assert.equal(zeroFromEmpty.hobbyHours, '0.0');
+  assert.equal(zeroFromEmpty.clearedMistakesCount, 0);
+  assert.equal(zeroFromEmpty.avgScorePercent, 0);
+  assert.equal(zeroFromEmpty.isEmpty, true);
+  assert.ok(zeroFromEmpty.emptyGuideText.includes('暂无数据'));
+
+  // 2. Purged demo data with only demo items remaining
+  const zeroFromPurged = calculateDeskSummary(
+    [{ id: 'task-1', subject: '数学', estimatedMinutes: 45, isDemo: true, completed: true } as any],
+    {
+      isDemoPurged: true,
+      mistakes: [{ id: 'mis-1', cleared: true, isDemo: true } as any],
+      examScores: [{ subject: '英语', score: 116, fullScore: 120, isDemo: true } as any],
+    }
+  );
+  assert.equal(zeroFromPurged.totalCount, 0);
+  assert.equal(zeroFromPurged.totalMinutes, 0);
+  assert.equal(zeroFromPurged.clearedMistakesCount, 0);
+  assert.equal(zeroFromPurged.avgScorePercent, 0);
+  assert.equal(zeroFromPurged.isEmpty, true);
+  assert.ok(zeroFromPurged.emptyGuideText.includes('暂无数据'));
+});

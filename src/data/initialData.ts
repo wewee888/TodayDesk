@@ -330,6 +330,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '+4 分',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -339,6 +340,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '连续满A',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -348,6 +350,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '古文扎实',
       trendIcon: 'edit_note',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   '10月月考': [
@@ -359,6 +362,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '+8 分',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -368,6 +372,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '稳中有升',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -377,6 +382,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '需抓作文',
       trendIcon: 'edit_note',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   期中预备: [
@@ -388,6 +394,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '压轴全对',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -397,6 +404,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '优势稳定',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -406,6 +414,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '+4 分',
       trendIcon: 'trending_up',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   中考模拟: [
@@ -417,6 +426,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '超重点线',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -426,6 +436,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '优势学科',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -435,6 +446,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '稳步突破',
       trendIcon: 'trending_up',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   期中考试: [
@@ -446,6 +458,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '期中稳定高分',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -455,6 +468,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '稳居前列',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -464,6 +478,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '阅读提分',
       trendIcon: 'trending_up',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   '11月月考': [
@@ -475,6 +490,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '连续全对突破',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -484,6 +500,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '保持优势',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -493,6 +510,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '稳中有进',
       trendIcon: 'trending_up',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
   期末考试: [
@@ -504,6 +522,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '期末冲刺佳绩',
       trendIcon: 'trending_up',
       colorScheme: 'primary',
+      isDemo: true,
     },
     {
       subject: '英语',
@@ -513,6 +532,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '全科领跑',
       trendIcon: 'check',
       colorScheme: 'secondary',
+      isDemo: true,
     },
     {
       subject: '语文',
@@ -522,6 +542,7 @@ export const EXAM_DATA_BY_PERIOD: Record<ExamPeriod, ExamScoreCard[]> = {
       trendText: '作文显著进步',
       trendIcon: 'trending_up',
       colorScheme: 'tertiary',
+      isDemo: true,
     },
   ],
 };

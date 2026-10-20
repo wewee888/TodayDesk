@@ -446,7 +446,7 @@ export const MultiPeriodReportSection: React.FC<
     );
   };
 
-  // Determine whether demo data has been cleared (either explicitly via isDemoPurged flag or because no demo tasks/mistakes remain)
+  // Determine whether demo data has been cleared or data source is empty
   const rawSummary = calculateDeskSummary(tasks, {
     isDemoPurged,
     mistakes,
@@ -454,8 +454,8 @@ export const MultiPeriodReportSection: React.FC<
   });
   const effectiveDemoPurged =
     Boolean(isDemoPurged) ||
-    (rawSummary.demoTaskCount === 0 &&
-      !mistakes.some((m) => isDemoMistakeItem(m)));
+    rawSummary.isEmpty ||
+    rawSummary.demoTaskCount === 0;
 
   const realTimeSummary = calculateDeskSummary(tasks, {
     isDemoPurged: effectiveDemoPurged,
@@ -483,7 +483,9 @@ export const MultiPeriodReportSection: React.FC<
     const manualExtra = extraAllCorrectMap[item.subject] || 0;
 
     const liveScoreCard = examScores.find((c) => c.subject === item.subject);
-    const hasLiveScore = Boolean(liveScoreCard && (!effectiveDemoPurged || !liveScoreCard.isDemo));
+    const hasLiveScore = Boolean(
+      liveScoreCard && (!effectiveDemoPurged || !liveScoreCard.isDemo)
+    );
 
     const score = hasLiveScore && liveScoreCard ? liveScoreCard.score : 0;
     const fullScore =
@@ -532,7 +534,7 @@ export const MultiPeriodReportSection: React.FC<
     let statusColorClass = 'bg-primary-fixed/60 text-primary';
     if (!hasLiveScore && effectiveDemoPurged) {
       if (totalTasks === 0) {
-        statusBadge = '待录入';
+        statusBadge = '暂无数据';
         statusColorClass = 'bg-surface-container text-on-surface-variant';
       } else if (allCorrectRate >= 85 && completedTasks > 0) {
         statusBadge = '🏆 全对 · 待录考分';
@@ -558,7 +560,7 @@ export const MultiPeriodReportSection: React.FC<
     const scoreText = hasLiveScore
       ? `${score}/${fullScore}`
       : effectiveDemoPurged
-      ? '待录入'
+      ? '暂无数据'
       : `${item.defaultScore}/${item.defaultFullScore}`;
 
     return {
@@ -578,7 +580,7 @@ export const MultiPeriodReportSection: React.FC<
             ? `已累计 ${periodMinutes} 分钟 · 完成 ${completedTasks}/${totalTasks} 项${
                 hasLiveScore ? '' : '（考分待录入）'
               }`
-            : '暂无作业与考分记录 · 录入后自动生成诊断'
+            : '暂无数据 · 录入作业或考分后自动生成诊断'
           : item.trendNote),
       statusBadge,
       statusColorClass,
@@ -876,7 +878,7 @@ export const MultiPeriodReportSection: React.FC<
             </span>
           </div>
           <span className="px-2 py-0.5 rounded-full bg-white text-[10px] font-bold text-secondary border border-secondary/20">
-            {realTimeSummary.isEmpty ? '空数据归零状态' : '100% 真实任务统计'}
+            {realTimeSummary.isEmpty ? '暂无数据' : '100% 真实任务统计'}
           </span>
         </div>
       )}
@@ -902,7 +904,9 @@ export const MultiPeriodReportSection: React.FC<
             </span>
           </div>
           <span className="text-[11px] text-secondary font-semibold block">
-            语数英物化历地生道法纯作业累计 · 完成率 {academicCompletionRate}%
+            {realTimeSummary.isEmpty
+              ? '暂无数据 · 录入作业后自动统计'
+              : `语数英物化历地生道法纯作业累计 · 完成率 ${academicCompletionRate}%`}
           </span>
         </div>
 
@@ -925,8 +929,9 @@ export const MultiPeriodReportSection: React.FC<
             </span>
           </div>
           <span className="text-[11px] text-on-surface-variant block">
-            其中数学全对 {mathRow?.allCorrectTimes ?? 0}/{mathRow?.totalTasks ?? 0} 次（全对率{' '}
-            {mathRow?.allCorrectRate ?? 0}%）
+            {realTimeSummary.isEmpty
+              ? '暂无数据 · 核对全对后自动登榜'
+              : `其中数学全对 ${mathRow?.allCorrectTimes ?? 0}/${mathRow?.totalTasks ?? 0} 次（全对率 ${mathRow?.allCorrectRate ?? 0}%）`}
           </span>
         </div>
 
@@ -992,7 +997,7 @@ export const MultiPeriodReportSection: React.FC<
               {avgScorePercent}%
             </span>
             <span className="text-xs text-secondary font-bold">
-              {avgScorePercent > 0 ? `较上周期 ${meta.scoreDelta}` : '录入考分后自动计算'}
+              {avgScorePercent > 0 ? `较上周期 ${meta.scoreDelta}` : '暂无数据 · 录入考分后自动计算'}
             </span>
           </div>
           <span className="text-[11px] text-on-surface-variant block">

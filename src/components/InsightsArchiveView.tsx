@@ -153,6 +153,13 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   const [renameCurrentPeriodInput, setRenameCurrentPeriodInput] =
     useState(examPeriod);
 
+  const displayedMistakes = isDemoPurged
+    ? mistakes.filter((m) => !isDemoMistakeItem(m))
+    : mistakes;
+  const displayedExamScores = isDemoPurged
+    ? examScores.filter((c) => !c.isDemo)
+    : examScores;
+
   // Editable copy of all score cards for the current examPeriod (supports modifying subject name, score, fullScore, and adding new subjects)
   const [draftCards, setDraftCards] = useState<ExamScoreCard[]>(examScores);
   const [newExamSubjectName, setNewExamSubjectName] = useState('');
@@ -160,12 +167,12 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   const [newExamSubjectFull, setNewExamSubjectFull] = useState('100');
 
   const { remainingMistakes, clearedCount } = computeMistakeArchiveCounts(
-    mistakes,
+    displayedMistakes,
     Boolean(isDemoPurged)
   );
   const efficiencyBubbles = computeDynamicEfficiencyBubbles(
     tasks,
-    examScores,
+    displayedExamScores,
     INITIAL_EFFICIENCY_BUBBLES,
     Boolean(isDemoPurged)
   );
@@ -198,7 +205,11 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
   };
 
   const openFastEntry = () => {
-    setDraftCards(examScores.map((c) => ({ ...c })));
+    setDraftCards(
+      (displayedExamScores.length > 0 ? displayedExamScores : examScores).map(
+        (c) => ({ ...c, isDemo: false })
+      )
+    );
     setShowFastScoreInput(true);
   };
 
@@ -260,6 +271,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
       const sc = Math.min(Math.max(Math.round(Number(c.score) || 0), 0), full);
       return {
         ...c,
+        isDemo: false,
         subject: c.subject.trim() || '未命名学科',
         score: sc,
         fullScore: full,
@@ -318,7 +330,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               </span>
               <span>录入错题</span>
             </button>
-            {onClearAllMistakes && mistakes.length > 0 && (
+            {onClearAllMistakes && displayedMistakes.length > 0 && (
               confirmClearAllMistakes ? (
                 <div className="inline-flex items-center gap-1 bg-error-container/30 px-2 py-0.5 rounded-full">
                   <button
@@ -358,7 +370,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               onClick={() => setShowAllMistakesModal(true)}
               className="inline-flex items-center gap-0.5 text-primary text-[12px] font-semibold hover:opacity-80 transition-opacity cursor-pointer"
             >
-              <span>全部错题 ({mistakes.length})</span>
+              <span>全部错题 ({displayedMistakes.length})</span>
               <span className="material-symbols-outlined text-[16px]">
                 chevron_right
               </span>
@@ -367,6 +379,25 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </div>
 
         {/* Swipeable Card Carousel (supports PC left-mouse hold & drag) */}
+        {displayedMistakes.length === 0 ? (
+          <div className="p-5 rounded-3xl bg-surface-container-lowest border border-dashed border-[#EAE4DA] flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-on-surface">
+                暂无错题数据 · 示范错题已清空
+              </div>
+              <p className="text-[11px] text-on-surface-variant">
+                点击右上角「录入错题」收录平时作业或考试中的真实错题，支持拍照存档与周末清账。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAddingMistake(true)}
+              className="px-3.5 py-1.5 rounded-full bg-primary text-on-primary text-xs font-semibold cursor-pointer shrink-0"
+            >
+              + 录入错题
+            </button>
+          </div>
+        ) : (
         <div
           {...mistakeDragProps}
           className={`flex gap-3.5 overflow-x-auto pb-2 pt-1 -mx-5 px-5 no-scrollbar select-none ${
@@ -375,7 +406,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               : 'cursor-grab snap-x snap-mandatory'
           }`}
         >
-          {mistakes.map((item) => {
+          {displayedMistakes.map((item) => {
             const imgFailed = imageFallbackMap[item.id];
             return (
               <div
@@ -669,6 +700,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
             );
           })}
         </div>
+        )}
       </section>
 
       {/* SECTION 2: 考试成绩与能力档案 */}
@@ -1245,13 +1277,13 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
         </div>
 
         {/* Score Cards Bento Grid (Click card to edit subject, score & fullScore) */}
-        {examScores.length === 0 ? (
+        {displayedExamScores.length === 0 ? (
           <div className="p-6 rounded-2xl bg-surface-container-lowest border border-dashed border-[#EAE4DA] flex flex-col items-center justify-center text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-secondary-container/60 text-secondary flex items-center justify-center">
               <span className="material-symbols-outlined text-[24px]">add_chart</span>
             </div>
             <div className="space-y-1 max-w-sm">
-              <div className="text-sm font-bold text-on-surface">「{examPeriod}」暂未录入考试成绩</div>
+              <div className="text-sm font-bold text-on-surface">「{examPeriod}」暂无数据 · 暂未录入考试成绩</div>
               <p className="text-xs text-on-surface-variant leading-relaxed">
                 示范成绩已清空。点击下方按钮即可录入真实考分与满分，开启专属成长档案。
               </p>
@@ -1267,7 +1299,7 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-            {examScores.map((card, idx) => {
+            {displayedExamScores.map((card, idx) => {
               const pct = Math.min(
                 100,
                 Math.round((card.score / Math.max(card.fullScore, 1)) * 100)

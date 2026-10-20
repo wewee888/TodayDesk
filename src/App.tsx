@@ -435,7 +435,12 @@ export default function App() {
     currentUserProfile.account === 'lizihan' ||
     currentUserProfile.account === 'parent_li';
 
-  const effectiveIsDemoPurged = isDemoPurged || !isPublicDemoAccount;
+  const hasAnyDemoTask = homeworkTasks.some((t) => isDemoHomeworkTask(t));
+  const effectiveIsDemoPurged =
+    isDemoPurged ||
+    !isPublicDemoAccount ||
+    homeworkTasks.length === 0 ||
+    !hasAnyDemoTask;
 
   const realHomeworkTasks = effectiveIsDemoPurged
     ? homeworkTasks.filter((t) => !isDemoHomeworkTask(t))
@@ -524,17 +529,27 @@ export default function App() {
                   : prev.customSubjects,
               }));
             }
-            if (Array.isArray(data.homeworkTasks) && data.homeworkTasks.length > 0) {
+            if (Array.isArray(data.homeworkTasks)) {
               setHomeworkTasks(data.homeworkTasks);
+              if (data.homeworkTasks.length === 0) {
+                setIsDemoPurged(true);
+              }
             }
-            if (Array.isArray(data.schedules) && data.schedules.length > 0) {
+            if (Array.isArray(data.schedules)) {
               setSchedules(data.schedules);
             }
-            if (Array.isArray(data.mistakes) && data.mistakes.length > 0) {
+            if (Array.isArray(data.mistakes)) {
               setMistakes(data.mistakes);
             }
             if (data.examDataMap && typeof data.examDataMap === 'object') {
-              setExamDataMap((prev) => ({ ...prev, ...data.examDataMap }));
+              if (Object.keys(data.examDataMap).length > 0) {
+                setExamDataMap(data.examDataMap);
+              } else if (
+                Array.isArray(data.homeworkTasks) &&
+                data.homeworkTasks.length === 0
+              ) {
+                setExamDataMap({} as Record<ExamPeriod, ExamScoreCard[]>);
+              }
             }
             if (data.parentCheerNote !== undefined) {
               setParentCheerNote(data.parentCheerNote);
@@ -886,6 +901,10 @@ export default function App() {
   const handlePurgeDemoTasksOnly = () => {
     const remaining = purgeOnlyDemoTasks(homeworkTasks);
     setHomeworkTasks(remaining);
+    setIsDemoPurged(true);
+    try {
+      localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
+    } catch {}
     syncToCloudD1({ homeworkTasks: remaining, purgeMockData: true });
     showToast(
       remaining.length > 0
@@ -896,12 +915,20 @@ export default function App() {
 
   const handleClearAllTasks = () => {
     setHomeworkTasks([]);
+    setIsDemoPurged(true);
+    try {
+      localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
+    } catch {}
     syncToCloudD1({ homeworkTasks: [], clearAllTasks: true });
     showToast('已清空书桌任务，现在可以添加您的专属作业啦 ✨');
   };
 
   const handleRestoreDefaultTasks = () => {
     setHomeworkTasks(INITIAL_HOMEWORK_TASKS);
+    setIsDemoPurged(false);
+    try {
+      localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'false');
+    } catch {}
     showToast('已恢复示范作业清单 ✓');
   };
 

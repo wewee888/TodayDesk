@@ -1299,22 +1299,104 @@ export interface DeskSummaryMetrics {
   emptyGuideText: string;
 }
 
+export function createZeroDeskSummary(
+  isDemoPurged = false
+): DeskSummaryMetrics {
+  return {
+    totalCount: 0,
+    completedCount: 0,
+    remainingCount: 0,
+    totalMinutes: 0,
+    completedMinutes: 0,
+    remainingMinutes: 0,
+    realTaskCount: 0,
+    demoTaskCount: 0,
+    academicCount: 0,
+    academicCompletedCount: 0,
+    academicCompletionRate: 0,
+    academicMinutes: 0,
+    academicHours: '0.0',
+    peCount: 0,
+    peCompletedCount: 0,
+    peMinutes: 0,
+    peHours: '0.0',
+    hobbyCount: 0,
+    hobbyCompletedCount: 0,
+    hobbyMinutes: 0,
+    hobbyHours: '0.0',
+    allCorrectCount: 0,
+    allCorrectRate: 0,
+    completedPomodoros: 0,
+    clearedMistakesCount: 0,
+    avgScorePercent: 0,
+    isEmpty: true,
+    emptyGuideText: isDemoPurged
+      ? '暂无数据 · 示范数据已全部清空。在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算'
+      : '暂无数据 · 在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算',
+  };
+}
+
 export function calculateDeskSummary(
-  tasks: HomeworkTask[],
+  tasks: HomeworkTask[] | null | undefined,
   options?: {
     isDemoPurged?: boolean;
+    isDataSourceEmpty?: boolean;
     mistakes?: MistakeItem[];
     examScores?: ExamScoreCard[];
   }
 ): DeskSummaryMetrics {
+  // Detect whether localStorage or D1 sync state indicates demo data was purged or account data source is empty
+  let localDemoPurged = false;
+  let localTasksEmpty = false;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      if (window.localStorage.getItem('study_desk_demo_purged_v1') === 'true') {
+        localDemoPurged = true;
+      }
+      const rawStoredTasks = window.localStorage.getItem(
+        'study_desk_homework_tasks_v1'
+      );
+      if (rawStoredTasks !== null && rawStoredTasks.trim() === '[]') {
+        localTasksEmpty = true;
+      }
+    } catch {}
+  }
+
+  const effectiveIsDemoPurged =
+    options?.isDemoPurged !== undefined
+      ? Boolean(options.isDemoPurged)
+      : localDemoPurged || localTasksEmpty;
+
   const safeTasks = Array.isArray(tasks) ? tasks : [];
-  const demoTaskCount = safeTasks.filter((t) => isDemoHomeworkTask(t)).length;
-  const realTaskCount = safeTasks.length - demoTaskCount;
 
   // When demo data is purged, strictly exclude any residual demo tasks so only real tasks are counted
-  const activeTasks = options?.isDemoPurged
+  const activeTasks = effectiveIsDemoPurged
     ? safeTasks.filter((t) => !isDemoHomeworkTask(t))
     : safeTasks;
+
+  const activeMistakes = Array.isArray(options?.mistakes)
+    ? effectiveIsDemoPurged
+      ? options.mistakes.filter((m) => !isDemoMistakeItem(m))
+      : options.mistakes
+    : [];
+
+  const activeScores = Array.isArray(options?.examScores)
+    ? effectiveIsDemoPurged
+      ? options.examScores.filter((s) => !s.isDemo)
+      : options.examScores
+    : [];
+
+  // Force return zero-value object if account data source (localStorage or D1 sync) is empty or demo data is purged with no real tasks
+  if (
+    options?.isDataSourceEmpty ||
+    safeTasks.length === 0 ||
+    activeTasks.length === 0
+  ) {
+    return createZeroDeskSummary(effectiveIsDemoPurged);
+  }
+
+  const demoTaskCount = safeTasks.filter((t) => isDemoHomeworkTask(t)).length;
+  const realTaskCount = safeTasks.length - demoTaskCount;
 
   const totalCount = activeTasks.length;
   const completedTasks = activeTasks.filter((t) => t.completed);
@@ -1378,18 +1460,8 @@ export function calculateDeskSummary(
     0
   );
 
-  const activeMistakes = Array.isArray(options?.mistakes)
-    ? options?.isDemoPurged
-      ? options.mistakes.filter((m) => !isDemoMistakeItem(m))
-      : options.mistakes
-    : [];
   const clearedMistakesCount = activeMistakes.filter((m) => m.cleared).length;
 
-  const activeScores = Array.isArray(options?.examScores)
-    ? options?.isDemoPurged
-      ? options.examScores.filter((s) => !s.isDemo)
-      : options.examScores
-    : [];
   const avgScorePercent =
     activeScores.length > 0
       ? Math.round(
@@ -1402,13 +1474,6 @@ export function calculateDeskSummary(
         )
       : 0;
 
-  const isEmpty = totalCount === 0;
-  const emptyGuideText = isEmpty
-    ? options?.isDemoPurged
-      ? '示范数据已全部清空 · 暂无作业与打卡记录。在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算'
-      : '暂无作业与打卡记录 · 在「今日书桌」录入或点击上方「+ 补录漏记记录」后，报表将根据真实任务实时重算'
-    : '';
-
   return {
     totalCount,
     completedCount,
@@ -1416,8 +1481,8 @@ export function calculateDeskSummary(
     totalMinutes,
     completedMinutes,
     remainingMinutes,
-    realTaskCount: options?.isDemoPurged ? totalCount : realTaskCount,
-    demoTaskCount: options?.isDemoPurged ? 0 : demoTaskCount,
+    realTaskCount: effectiveIsDemoPurged ? totalCount : realTaskCount,
+    demoTaskCount: effectiveIsDemoPurged ? 0 : demoTaskCount,
     academicCount,
     academicCompletedCount,
     academicCompletionRate,
@@ -1436,8 +1501,8 @@ export function calculateDeskSummary(
     completedPomodoros,
     clearedMistakesCount,
     avgScorePercent,
-    isEmpty,
-    emptyGuideText,
+    isEmpty: false,
+    emptyGuideText: '',
   };
 }
 
