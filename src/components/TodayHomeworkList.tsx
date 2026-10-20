@@ -10,6 +10,10 @@ import {
   getSubjectBadgeClass,
   getSubjectMeta,
 } from '../utils/studyLogic';
+import {
+  playPomodoroCompleteSound,
+  playPomodoroTickStartSound,
+} from '../utils/soundEffects';
 
 interface TodayHomeworkListProps {
   tasks: HomeworkTask[];
@@ -133,7 +137,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
         if (prev <= 1) {
           window.clearInterval(timer);
           setIsRunning(false);
-          playWarmCompletionChime();
+          playPomodoroCompleteSound();
           onPomodoroComplete(activeTaskId);
           return totalPomodoroSeconds;
         }
@@ -146,12 +150,15 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   const handleStartPomodoro = (task: HomeworkTask) => {
     if (activeTaskId === task.id) {
-      setIsRunning((prev) => !prev);
+      const nextRunning = !isRunning;
+      setIsRunning(nextRunning);
+      if (nextRunning) playPomodoroTickStartSound();
       return;
     }
     setActiveTaskId(task.id);
     setRemainingSeconds(totalPomodoroSeconds);
     setIsRunning(true);
+    playPomodoroTickStartSound();
     if (onShowToast) {
       onShowToast(
         `🍅 已开启「${task.subject}」${pomodoroMinutes}分钟专注倒计时`
@@ -167,7 +174,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   const handleFinishPomodoroNow = (task: HomeworkTask) => {
     setIsRunning(false);
     setRemainingSeconds(totalPomodoroSeconds);
-    playWarmCompletionChime();
+    playPomodoroCompleteSound();
     onPomodoroComplete(task.id);
   };
 
@@ -220,6 +227,9 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
 
   const handleToggleTaskCheck = (task: HomeworkTask) => {
     const nextCompleted = !task.completed;
+    if (nextCompleted) {
+      playWarmCompletionChime();
+    }
     if (nextCompleted && task.actualMinutes === undefined) {
       const updated: HomeworkTask = {
         ...task,

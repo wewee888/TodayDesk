@@ -36,12 +36,24 @@ import { YesterdayReviewBanner } from './components/YesterdayReviewBanner';
 import { RoutineScheduleCarousel } from './components/RoutineScheduleCarousel';
 import { TodayHomeworkList } from './components/TodayHomeworkList';
 import { QuickCapsuleSheet } from './components/QuickCapsuleSheet';
-import { InsightsArchiveView } from './components/InsightsArchiveView';
-import { VoiceAndCameraModal } from './components/VoiceAndCameraModal';
-import { WeeklyReportModal } from './components/WeeklyReportModal';
-import { SchedulePresetModal } from './components/SchedulePresetModal';
-import { DeskSettingsModal } from './components/DeskSettingsModal';
-import { TimetableImportModal } from './components/TimetableImportModal';
+const InsightsArchiveView = React.lazy(() =>
+  import('./components/InsightsArchiveView').then((m) => ({ default: m.InsightsArchiveView }))
+);
+const VoiceAndCameraModal = React.lazy(() =>
+  import('./components/VoiceAndCameraModal').then((m) => ({ default: m.VoiceAndCameraModal }))
+);
+const WeeklyReportModal = React.lazy(() =>
+  import('./components/WeeklyReportModal').then((m) => ({ default: m.WeeklyReportModal }))
+);
+const SchedulePresetModal = React.lazy(() =>
+  import('./components/SchedulePresetModal').then((m) => ({ default: m.SchedulePresetModal }))
+);
+const DeskSettingsModal = React.lazy(() =>
+  import('./components/DeskSettingsModal').then((m) => ({ default: m.DeskSettingsModal }))
+);
+const TimetableImportModal = React.lazy(() =>
+  import('./components/TimetableImportModal').then((m) => ({ default: m.TimetableImportModal }))
+);
 import {
   WelcomeAuthScreen,
   type UserAccountProfile,
@@ -386,6 +398,52 @@ export default function App() {
     }, 2400);
   }, []);
 
+  // Desktop productivity keyboard shortcuts: [Esc] Close Modals, [Ctrl+K] Quick Capsule
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Esc: close active modals
+      if (e.key === 'Escape') {
+        if (
+          isQuickSheetOpen ||
+          isDeskSettingsOpen ||
+          isTimetableModalOpen ||
+          voiceOrCameraMode !== null ||
+          isWeeklyReportOpen ||
+          isScheduleModalOpen ||
+          showNotifications
+        ) {
+          setIsQuickSheetOpen(false);
+          setIsDeskSettingsOpen(false);
+          setIsTimetableModalOpen(false);
+          setVoiceOrCameraMode(null);
+          setIsWeeklyReportOpen(false);
+          setIsScheduleModalOpen(false);
+          setShowNotifications(false);
+        }
+        return;
+      }
+
+      // 2. Ctrl+K or Cmd+K: toggle quick task capsule sheet
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsQuickSheetOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isQuickSheetOpen,
+    isDeskSettingsOpen,
+    isTimetableModalOpen,
+    voiceOrCameraMode,
+    isWeeklyReportOpen,
+    isScheduleModalOpen,
+    showNotifications,
+  ]);
+
   // Cloudflare D1 Cloud Hydration: Sync latest user profile and settings from Cloudflare D1
   useEffect(() => {
     if (!currentUserProfile?.account || typeof window === 'undefined') return;
@@ -404,6 +462,15 @@ export default function App() {
             }
             if (Array.isArray(data.homeworkTasks) && data.homeworkTasks.length > 0) {
               setHomeworkTasks(data.homeworkTasks);
+            }
+            if (Array.isArray(data.schedules) && data.schedules.length > 0) {
+              setSchedules(data.schedules);
+            }
+            if (Array.isArray(data.mistakes) && data.mistakes.length > 0) {
+              setMistakes(data.mistakes);
+            }
+            if (data.examDataMap && typeof data.examDataMap === 'object') {
+              setExamDataMap((prev) => ({ ...prev, ...data.examDataMap }));
             }
           }
         }
@@ -425,6 +492,7 @@ export default function App() {
       homeworkTasks?: HomeworkTask[];
       schedules?: ScheduleItem[];
       mistakes?: MistakeItem[];
+      examDataMap?: Record<ExamPeriod, ExamScoreCard[]>;
       purgeMockData?: boolean;
       clearAllTasks?: boolean;
       clearAllSchedules?: boolean;
@@ -454,6 +522,10 @@ export default function App() {
               overrides?.mistakes !== undefined
                 ? overrides.mistakes
                 : mistakes,
+            examDataMap:
+              overrides?.examDataMap !== undefined
+                ? overrides.examDataMap
+                : examDataMap,
             purgeMockData: overrides?.purgeMockData,
             clearAllTasks: overrides?.clearAllTasks,
             clearAllSchedules: overrides?.clearAllSchedules,
@@ -465,7 +537,7 @@ export default function App() {
         });
       } catch {}
     },
-    [currentUserProfile, deskSettings, homeworkTasks, schedules, mistakes]
+    [currentUserProfile, deskSettings, homeworkTasks, schedules, mistakes, examDataMap]
   );
 
   // Handlers for Yesterday Review
@@ -536,20 +608,28 @@ export default function App() {
     if (target && !target.completed) {
       showToast(`已完成「${target.title}」打卡 · 好习惯 +1 🌱`);
     }
-    setSchedules((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s))
-    );
+    setSchedules((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s));
+      syncToCloudD1({ schedules: next });
+      return next;
+    });
   };
 
   const handleAddSchedule = (item: ScheduleItem) => {
-    setSchedules((prev) => [item, ...prev]);
+    setSchedules((prev) => {
+      const next = [item, ...prev];
+      syncToCloudD1({ schedules: next });
+      return next;
+    });
     showToast(`已新增固定日程：${item.title} (${item.timeText})`);
   };
 
   const handleUpdateSchedule = (updated: ScheduleItem) => {
-    setSchedules((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
-    );
+    setSchedules((prev) => {
+      const next = prev.map((s) => (s.id === updated.id ? updated : s));
+      syncToCloudD1({ schedules: next });
+      return next;
+    });
     showToast(`已更新日程：${updated.title} (${updated.timeText}) ✓`);
   };
 
@@ -573,13 +653,15 @@ export default function App() {
     attendanceStatus: AttendanceStatus,
     leaveNote?: string
   ) => {
-    setSchedules((prev) =>
-      prev.map((s) =>
+    setSchedules((prev) => {
+      const next = prev.map((s) =>
         s.title.includes(activityName) || activityName.includes(s.title)
           ? { ...s, attendanceStatus, leaveNote }
           : s
-      )
-    );
+      );
+      syncToCloudD1({ schedules: next });
+      return next;
+    });
   };
 
   // Rename a subject across tasks, mistakes, and exam cards
@@ -775,12 +857,15 @@ export default function App() {
   const handleClearMistake = (id: string) => {
     const res = clearMistakeItem(mistakes, id);
     setMistakes(res.updatedMistakes);
+    syncToCloudD1({ mistakes: res.updatedMistakes });
   };
 
   const handleRestoreMistake = (id: string) => {
-    setMistakes((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, cleared: false } : m))
-    );
+    setMistakes((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, cleared: false } : m));
+      syncToCloudD1({ mistakes: next });
+      return next;
+    });
   };
 
   const handleDeleteMistake = (id: string) => {
@@ -963,7 +1048,9 @@ export default function App() {
   ) => {
     setExamDataMap((prev) => {
       if (scores.cards && scores.cards.length > 0) {
-        return { ...prev, [period]: scores.cards };
+        const nextMap = { ...prev, [period]: scores.cards };
+        syncToCloudD1({ examDataMap: nextMap });
+        return nextMap;
       }
       const currentList = prev[period] || prev['10月月考'];
       const updatedList: ExamScoreCard[] = currentList.map((card) => {
@@ -1005,7 +1092,9 @@ export default function App() {
         }
         return card;
       });
-      return { ...prev, [period]: updatedList };
+      const nextMap = { ...prev, [period]: updatedList };
+      syncToCloudD1({ examDataMap: nextMap });
+      return nextMap;
     });
   };
 
@@ -1645,28 +1734,39 @@ export default function App() {
                 />
               </div>
             ) : (
-              <InsightsArchiveView
-                tasks={homeworkTasks}
-                mistakes={mistakes}
-                gradeClass={deskSettings.gradeClass}
-                isDemoPurged={isDemoPurged}
-                onClearMistake={handleClearMistake}
-                onRestoreMistake={handleRestoreMistake}
-                onDeleteMistake={handleDeleteMistake}
-                onClearAllMistakes={handleClearAllMistakes}
-                onUpdateMistake={handleUpdateMistake}
-                onAddMistake={handleAddMistake}
-                examPeriod={examPeriod}
-                onSelectExamPeriod={setExamPeriod}
-                examScores={
-                  examDataMap[examPeriod] || []
+              <React.Suspense
+                fallback={
+                  <div className="p-8 text-center text-on-surface-variant text-xs flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[20px] animate-spin">
+                      progress_activity
+                    </span>
+                    <span>正在加载成长档案与清账罗盘...</span>
+                  </div>
                 }
-                onUpdateExamScores={handleUpdateExamScores}
-                customSubjects={deskSettings.customSubjects}
-                onOpenCameraSnap={() => setVoiceOrCameraMode('camera')}
-                onOpenWeeklyReport={() => setIsWeeklyReportOpen(true)}
-                onShowToast={showToast}
-              />
+              >
+                <InsightsArchiveView
+                  tasks={homeworkTasks}
+                  mistakes={mistakes}
+                  gradeClass={deskSettings.gradeClass}
+                  isDemoPurged={isDemoPurged}
+                  onClearMistake={handleClearMistake}
+                  onRestoreMistake={handleRestoreMistake}
+                  onDeleteMistake={handleDeleteMistake}
+                  onClearAllMistakes={handleClearAllMistakes}
+                  onUpdateMistake={handleUpdateMistake}
+                  onAddMistake={handleAddMistake}
+                  examPeriod={examPeriod}
+                  onSelectExamPeriod={setExamPeriod}
+                  examScores={
+                    examDataMap[examPeriod] || []
+                  }
+                  onUpdateExamScores={handleUpdateExamScores}
+                  customSubjects={deskSettings.customSubjects}
+                  onOpenCameraSnap={() => setVoiceOrCameraMode('camera')}
+                  onOpenWeeklyReport={() => setIsWeeklyReportOpen(true)}
+                  onShowToast={showToast}
+                />
+              </React.Suspense>
             )}
           </div>
 
@@ -1883,64 +1983,77 @@ export default function App() {
         weekdayName={currentDateInfo.weekdayName}
       />
 
-      {/* Desk Backend Settings Modal (PE Exam Exercises & Extracurricular Hobbies) */}
-      <DeskSettingsModal
-        isOpen={isDeskSettingsOpen}
-        onClose={() => setIsDeskSettingsOpen(false)}
-        settings={deskSettings}
-        onUpdateSettings={handleUpdateDeskSettings}
-        onQuickAddExtracurricularTask={(subject, activityName, minutes, title) =>
-          handleAddTaskFromCapsule(subject, activityName, minutes, title)
-        }
-        onAddExtracurricularSchedule={handleAddSchedule}
-        onSyncActivityAttendance={handleSyncActivityAttendance}
-        onRenameSubject={handleRenameSubject}
-        onPurgeAllMockData={handlePurgeAllMockData}
-        onRestoreAllMockData={handleRestoreAllMockData}
-        onShowToast={showToast}
-      />
+      <React.Suspense fallback={null}>
+        {/* Desk Backend Settings Modal (PE Exam Exercises & Extracurricular Hobbies) */}
+        {isDeskSettingsOpen && (
+          <DeskSettingsModal
+            isOpen={isDeskSettingsOpen}
+            onClose={() => setIsDeskSettingsOpen(false)}
+            settings={deskSettings}
+            onUpdateSettings={handleUpdateDeskSettings}
+            onQuickAddExtracurricularTask={(subject, activityName, minutes, title) =>
+              handleAddTaskFromCapsule(subject, activityName, minutes, title)
+            }
+            onAddExtracurricularSchedule={handleAddSchedule}
+            onSyncActivityAttendance={handleSyncActivityAttendance}
+            onRenameSubject={handleRenameSubject}
+            onPurgeAllMockData={handlePurgeAllMockData}
+            onRestoreAllMockData={handleRestoreAllMockData}
+            onShowToast={showToast}
+          />
+        )}
 
-      {/* Timetable Image / File Import & Semester Subject Recognition Modal */}
-      <TimetableImportModal
-        isOpen={isTimetableModalOpen}
-        onClose={() => setIsTimetableModalOpen(false)}
-        onApplyTimetableResult={handleApplyTimetableResult}
-        onShowToast={showToast}
-        gradeClass={deskSettings.gradeClass}
-        studentName={deskSettings.studentName}
-        schedules={schedules}
-      />
+        {/* Timetable Image / File Import & Semester Subject Recognition Modal */}
+        {isTimetableModalOpen && (
+          <TimetableImportModal
+            isOpen={isTimetableModalOpen}
+            onClose={() => setIsTimetableModalOpen(false)}
+            onApplyTimetableResult={handleApplyTimetableResult}
+            onShowToast={showToast}
+            gradeClass={deskSettings.gradeClass}
+            studentName={deskSettings.studentName}
+            schedules={schedules}
+          />
+        )}
 
-      {/* Voice & Camera AI Recognition Modal */}
-      <VoiceAndCameraModal
-        mode={voiceOrCameraMode}
-        onClose={() => setVoiceOrCameraMode(null)}
-        onAddParsedTasks={handleAddParsedVoiceTasks}
-        onImportRecognizedScores={(scores) => {
-          handleUpdateExamScores(examPeriod, scores);
-          setActiveView('archive');
-        }}
-        onShowToast={showToast}
-      />
+        {/* Voice & Camera AI Recognition Modal */}
+        {voiceOrCameraMode !== null && (
+          <VoiceAndCameraModal
+            mode={voiceOrCameraMode}
+            onClose={() => setVoiceOrCameraMode(null)}
+            onAddParsedTasks={handleAddParsedVoiceTasks}
+            onImportRecognizedScores={(scores) => {
+              handleUpdateExamScores(examPeriod, scores);
+              setActiveView('archive');
+            }}
+            onShowToast={showToast}
+            account={currentUserProfile?.account || 'lizihan'}
+          />
+        )}
 
-      {/* AI Personalized Weekly Report & Weekend Clearing Modal */}
-      <WeeklyReportModal
-        isOpen={isWeeklyReportOpen}
-        onClose={() => setIsWeeklyReportOpen(false)}
-        report={weeklyReport}
-        isGenerating={isGeneratingReport}
-        onRefreshAIReport={handleRefreshAIWeeklyReport}
-        onAddActionToDesk={(subject, taskType, minutes, title) => {
-          handleAddTaskFromCapsule(subject, taskType, minutes, title);
-        }}
-      />
+        {/* AI Personalized Weekly Report & Weekend Clearing Modal */}
+        {isWeeklyReportOpen && (
+          <WeeklyReportModal
+            isOpen={isWeeklyReportOpen}
+            onClose={() => setIsWeeklyReportOpen(false)}
+            report={weeklyReport}
+            isGenerating={isGeneratingReport}
+            onRefreshAIReport={handleRefreshAIWeeklyReport}
+            onAddActionToDesk={(subject, taskType, minutes, title) => {
+              handleAddTaskFromCapsule(subject, taskType, minutes, title);
+            }}
+          />
+        )}
 
-      {/* Routine Schedule Rule Modal */}
-      <SchedulePresetModal
-        isOpen={isScheduleModalOpen}
-        onClose={() => setIsScheduleModalOpen(false)}
-        onAddSchedule={handleAddSchedule}
-      />
+        {/* Routine Schedule Rule Modal */}
+        {isScheduleModalOpen && (
+          <SchedulePresetModal
+            isOpen={isScheduleModalOpen}
+            onClose={() => setIsScheduleModalOpen(false)}
+            onAddSchedule={handleAddSchedule}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 }

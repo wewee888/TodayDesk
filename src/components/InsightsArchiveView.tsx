@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type {
   EfficiencyBubble,
@@ -135,6 +135,30 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
 
   const remainingMistakes = mistakes.filter((m) => !m.cleared).length;
   const clearedCount = 5 + mistakes.filter((m) => m.cleared).length;
+
+  // Filter states for mistake notebook
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('全部');
+  const [onlyUnclearedFilter, setOnlyUnclearedFilter] = useState<boolean>(false);
+
+  const availableSubjects = useMemo(() => {
+    const set = new Set<string>();
+    mistakes.forEach((m) => {
+      if (m.subject) set.add(m.subject);
+    });
+    return ['全部', ...Array.from(set)];
+  }, [mistakes]);
+
+  const filteredMistakes = useMemo(() => {
+    return mistakes.filter((m) => {
+      if (selectedSubjectFilter !== '全部' && m.subject !== selectedSubjectFilter) {
+        return false;
+      }
+      if (onlyUnclearedFilter && m.cleared) {
+        return false;
+      }
+      return true;
+    });
+  }, [mistakes, selectedSubjectFilter, onlyUnclearedFilter]);
 
   const handleApplySmartExamRule = (
     month: number,
@@ -318,6 +342,57 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
           </div>
         </div>
 
+        {/* 学科多维筛选与待消灭状态切换栏 */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+            {availableSubjects.map((subj) => {
+              const count =
+                subj === '全部'
+                  ? mistakes.length
+                  : mistakes.filter((m) => m.subject === subj).length;
+              return (
+                <button
+                  key={subj}
+                  type="button"
+                  onClick={() => setSelectedSubjectFilter(subj)}
+                  className={`px-3 py-1 rounded-full text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                    selectedSubjectFilter === subj
+                      ? 'bg-primary text-on-primary font-bold shadow-2xs'
+                      : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                  }`}
+                >
+                  <span>{subj}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      selectedSubjectFilter === subj
+                        ? 'bg-on-primary/20 text-on-primary'
+                        : 'bg-surface-container-high text-on-surface-variant'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setOnlyUnclearedFilter((prev) => !prev)}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              onlyUnclearedFilter
+                ? 'bg-error-container text-on-error-container font-bold ring-1 ring-error/30'
+                : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+            }`}
+            title={onlyUnclearedFilter ? '点击查看全部' : '只看待消灭/未归档错题'}
+          >
+            <span className="material-symbols-outlined text-[15px]">
+              {onlyUnclearedFilter ? 'check_box' : 'check_box_outline_blank'}
+            </span>
+            <span>只看待消灭</span>
+          </button>
+        </div>
+
         {/* Swipeable Card Carousel (supports PC left-mouse hold & drag) */}
         <div
           {...mistakeDragProps}
@@ -327,7 +402,27 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
               : 'cursor-grab snap-x snap-mandatory'
           }`}
         >
-          {mistakes.map((item) => {
+          {filteredMistakes.length === 0 ? (
+            <div className="w-full py-8 px-4 text-center bg-surface-container-lowest rounded-3xl border border-dashed border-[#EAE4DA] text-on-surface-variant flex flex-col items-center justify-center gap-1.5 snap-start">
+              <span className="material-symbols-outlined text-2xl text-outline/60">
+                filter_alt_off
+              </span>
+              <p className="text-xs font-semibold text-on-surface">
+                当前筛选条件下暂无错题
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubjectFilter('全部');
+                  setOnlyUnclearedFilter(false);
+                }}
+                className="text-xs text-primary font-bold hover:underline cursor-pointer mt-0.5"
+              >
+                重置学科与待消灭筛选
+              </button>
+            </div>
+          ) : (
+            filteredMistakes.map((item) => {
             const imgFailed = imageFallbackMap[item.id];
             return (
               <div
@@ -590,7 +685,8 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                 </div>
               </div>
             );
-          })}
+          })
+        )}
         </div>
       </section>
 
@@ -1645,6 +1741,56 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                 </div>
               </div>
 
+              {/* 弹窗内学科与待消灭快捷筛选 */}
+              <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-1 shrink-0 border-b border-[#EAE4DA]/60">
+                <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+                  {availableSubjects.map((subj) => {
+                    const count =
+                      subj === '全部'
+                        ? mistakes.length
+                        : mistakes.filter((m) => m.subject === subj).length;
+                    return (
+                      <button
+                        key={subj}
+                        type="button"
+                        onClick={() => setSelectedSubjectFilter(subj)}
+                        className={`px-2.5 py-0.5 rounded-full text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                          selectedSubjectFilter === subj
+                            ? 'bg-primary text-on-primary font-bold shadow-2xs'
+                            : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                        }`}
+                      >
+                        <span>{subj}</span>
+                        <span
+                          className={`text-[10px] px-1 py-0.1 rounded-full ${
+                            selectedSubjectFilter === subj
+                              ? 'bg-on-primary/20 text-on-primary'
+                              : 'bg-surface-container-high text-on-surface-variant'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setOnlyUnclearedFilter((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    onlyUnclearedFilter
+                      ? 'bg-error-container text-on-error-container font-bold ring-1 ring-error/30'
+                      : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {onlyUnclearedFilter ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <span>只看待消灭</span>
+                </button>
+              </div>
+
               <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
                 {mistakes.length === 0 ? (
                   <div className="py-12 text-center text-on-surface-variant space-y-2">
@@ -1665,8 +1811,27 @@ export const InsightsArchiveView: React.FC<InsightsArchiveViewProps> = ({
                       <span>+ 录入第一道错题</span>
                     </button>
                   </div>
+                ) : filteredMistakes.length === 0 ? (
+                  <div className="py-10 text-center text-on-surface-variant space-y-2">
+                    <span className="material-symbols-outlined text-3xl text-outline/60">
+                      filter_alt_off
+                    </span>
+                    <p className="text-xs font-semibold text-on-surface">
+                      当前筛选条件下暂无错题
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubjectFilter('全部');
+                        setOnlyUnclearedFilter(false);
+                      }}
+                      className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                    >
+                      重置学科与待消灭筛选
+                    </button>
+                  </div>
                 ) : (
-                  mistakes.map((m) => (
+                  filteredMistakes.map((m) => (
                     <div
                       key={m.id}
                       className="p-3.5 rounded-2xl bg-surface-container-lowest border border-[#EAE4DA] flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"

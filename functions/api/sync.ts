@@ -87,6 +87,9 @@ export async function onRequestGet(context: any): Promise<Response> {
           timeText: s.time_text,
           tag: s.tag,
           tagClass: s.tag_class,
+          badgeText: s.tag || '习惯',
+          badgeClass: s.tag_class || 'bg-secondary-container text-secondary',
+          subtitle: '',
           icon: s.icon,
           completed: Boolean(s.completed),
           attendanceStatus: s.attendance_status || 'active',
@@ -104,6 +107,23 @@ export async function onRequestGet(context: any): Promise<Response> {
           cleared: Boolean(m.cleared),
         })),
         examScores: examRes?.results || [],
+        examDataMap: (() => {
+          const map: Record<string, any[]> = {};
+          for (const row of (examRes?.results || [])) {
+            const period = row.exam_period || '10月月考';
+            if (!map[period]) map[period] = [];
+            map[period].push({
+              id: row.id,
+              subject: row.subject,
+              score: row.score,
+              fullScore: row.full_score,
+              trendText: row.trend_text || '',
+              trendIcon: 'trending_up',
+              colorScheme: 'primary',
+            });
+          }
+          return Object.keys(map).length > 0 ? map : null;
+        })(),
       }),
       {
         headers: { 'Content-Type': 'application/json' },
@@ -303,7 +323,68 @@ export async function onRequestPost(context: any): Promise<Response> {
       );
     }
 
-    // 5. Batch execute all statements in a transaction
+    // 5. Upsert Schedules (Routine Habits & Extracurricular Activities)
+    for (const s of schedules) {
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO routine_schedules (id, account, title, time_text, tag, tag_class, icon, completed, attendance_status, leave_note, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(id) DO UPDATE SET
+             title = excluded.title,
+             time_text = excluded.time_text,
+             tag = excluded.tag,
+             tag_class = excluded.tag_class,
+             icon = excluded.icon,
+             completed = excluded.completed,
+             attendance_status = excluded.attendance_status,
+             leave_note = excluded.leave_note,
+             updated_at = CURRENT_TIMESTAMP`
+        ).bind(
+          s.id,
+          account,
+          s.title || '',
+          s.timeText || '',
+          s.badgeText || s.tag || '习惯',
+          s.badgeClass || s.tagClass || 'bg-secondary-container text-secondary',
+          s.icon || 'star',
+          s.completed ? 1 : 0,
+          s.attendanceStatus || 'active',
+          s.leaveNote || null
+        )
+      );
+    }
+
+    // 6. Upsert Exam Scores (from examDataMap)
+    if (examDataMap && typeof examDataMap === 'object') {
+      for (const [period, cards] of Object.entries(examDataMap)) {
+        if (!Array.isArray(cards)) continue;
+        for (const c of cards as any[]) {
+          const cardId = c.id || `exam-${account}-${period}-${c.subject}`;
+          statements.push(
+            env.DB.prepare(
+              `INSERT INTO exam_scores (id, account, exam_period, subject, score, full_score, trend_text, score_card_image_url)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 score = excluded.score,
+                 full_score = excluded.full_score,
+                 trend_text = excluded.trend_text,
+                 score_card_image_url = excluded.score_card_image_url`
+            ).bind(
+              cardId,
+              account,
+              period,
+              c.subject || '综合',
+              typeof c.score === 'number' ? c.score : 0,
+              typeof c.fullScore === 'number' ? c.fullScore : 100,
+              c.trendText || '',
+              c.imageUrl || c.scoreCardImageUrl || null
+            )
+          );
+        }
+      }
+    }
+
+    // 7. Batch execute all statements in a transaction
     if (statements.length > 0) {
       await env.DB.batch(statements);
     }
