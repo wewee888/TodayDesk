@@ -71,3 +71,20 @@
   4. `src/components/TimetableImportModal.tsx`：完善 `TimetablePeriodDetail` 对象 `subject` 字段兼容取值。
 - **验证与部署**：`tsc --noEmit` 0 错误通过；生产重新编译并推送上线 `index-OevBqKjs.js`。
 
+### 课表二维解析、「一键清空示范数据」零残留与按日打卡流水账表升级 (2026-10-20)
+- **每日作业与体育打卡按日期流水账表（支持补录漏记 & 修改错记）**：
+  1. 新增 `src/components/DailyHomeworkPeLedgerSection.tsx` 并集成至「成长档案与清账」：按日期倒序展示每日完成的文化课作业、体育锻炼打卡与课余兴趣明细表。
+  2. 支持按「全部记录 / 文化课作业 / 体育打卡 / 课余兴趣」与具体日期筛选检索；提供「+ 补录作业 / 体育打卡」面板（支持任选历史日期补录漏记的作业或体育打卡）与行内「修改」编辑器（支持更正日期、科目、类型、具体内容、耗时与老师核对全对状态）。
+- **去繁就简：移除冗余的「学生/家长」双身份切换**：
+  1. `src/components/WelcomeAuthScreen.tsx` & `src/App.tsx` & `src/components/TodayHomeworkList.tsx`：移除注册登录页的双身份选择器与顶栏视角切换按钮，统一为纯粹的家庭伴学书桌体验。
+- **全站图标与字体 100% 本地化存储 & 交互细节打磨**：
+  1. `index.html` & `public/favicon.svg` & `public/fonts/material-symbols-outlined.woff2`：移除外部 Google Fonts CDN 依赖，新增本地 SVG 图标与本地 Material Symbols 字体预加载；将所有弹窗中易出现缺失字形方框 `☒` 的字符 `✕` 统一替换为本地图标 `close`。
+  2. `src/components/DeskSettingsModal.tsx`：修复「新增项目」与「新增体育项」按钮双加号 `+ +` 展示问题；全站弹窗支持键盘 `Esc` 键一键关闭，移除全部浏览器原生 `window.confirm`。
+- **课表识别与预览表逐行对齐 & 清空示范数据零残留 & 公共示范账号隔离**：
+  1. `src/utils/studyLogic.ts` & `src/components/TimetableImportModal.tsx`：确保课表文本框与下方「周一至周五课程表预览」100% 逐行真实解析对齐（保留同日重复科目、支持早读行与点击单元格微调）。
+  2. `src/components/MultiPeriodReportSection.tsx` & `src/components/WeeklyReportModal.tsx` (`buildDynamicWeeklyReport`)：清空示范数据后，多维统计报表、效能评级与 AI 家庭周报全部根据真实任务与打卡动态计算，彻底消除写死假数据。
+  3. `src/App.tsx` & `functions/api/sync.ts`：对公共示范账号 `lizihan` 实施本地隔离保护，避免访客清空示范数据时污染云端 D1 公共母本；独立注册账号全量读写 D1。
+
+### 51.la 网站数据统计与访客分析集成 (2026-10-20)
+- 在 `index.html` 中配置挂载 51.la 官方最新 JavaScript SDK 数据统计代码 (`id: 28PaUV5XW7ttjXGI`, `ck: 28PaUV5XW7ttjXGI`)，实现全站访客流量、停留时长与页面交互数据的实时监测与分析。
+

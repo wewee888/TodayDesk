@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type {
   ScheduleItem,
   SubjectName,
@@ -104,6 +104,17 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   const { dragProps: gridDragProps, isDragging: isDraggingGrid } =
     useDragScroll<HTMLDivElement>();
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const runSmartRecognition = async (
@@ -119,6 +130,8 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     setRecognitionResult(localImmediate);
     setSelectedSubjects(localImmediate.detectedSubjects);
 
+    // Only call backend AI endpoint when an image is uploaded or extra subject extraction is needed,
+    // and never let an empty/incomplete backend weeklyGrid overwrite the line-by-line parsed weeklyGrid!
     try {
       const res = await fetch('/api/ai/parse-timetable', {
         method: 'POST',
@@ -134,8 +147,41 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data?.result && Array.isArray(data.result.detectedSubjects)) {
-          setRecognitionResult(data.result);
-          setSelectedSubjects(data.result.detectedSubjects);
+          const apiGrid = Array.isArray(data.result.weeklyGrid)
+            ? data.result.weeklyGrid
+            : [];
+          const hasCompleteApiGrid =
+            Boolean(imageBase64) &&
+            apiGrid.length >= 5 &&
+            apiGrid.every(
+              (col: any) => Array.isArray(col.periods) && col.periods.length > 0
+            );
+
+          if (imageBase64 && data.result.rawText) {
+            setRawText(data.result.rawText);
+          }
+
+          const finalWeeklyGrid = hasCompleteApiGrid
+            ? apiGrid
+            : imageBase64 && data.result.rawText
+            ? parseTimetableContent(
+                data.result.rawText,
+                fileName,
+                gradeLevel
+              ).weeklyGrid
+            : localImmediate.weeklyGrid;
+
+          const mergedDetected = imageBase64
+            ? (data.result.detectedSubjects as SubjectName[])
+            : localImmediate.detectedSubjects;
+
+          setRecognitionResult({
+            ...localImmediate,
+            ...data.result,
+            detectedSubjects: mergedDetected,
+            weeklyGrid: finalWeeklyGrid,
+          });
+          setSelectedSubjects(mergedDetected);
         }
       }
     } catch {
@@ -186,6 +232,17 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     ];
 
     let rowsHtml = '';
+    const hasMorningReading = dayCols.some((d) => Boolean(d.morningReading));
+    if (hasMorningReading) {
+      let morningCells = `<td style="border:1px solid #333; padding:5px; font-weight:bold; background:#fefce8;">早读<div style="font-size:10px; color:#555;">07:35 - 07:55</div></td>`;
+      for (let dIdx = 0; dIdx < 5; dIdx++) {
+        const mSubj = dayCols[dIdx]?.morningReading || '—';
+        morningCells += `<td style="border:1px solid #333; padding:5px; font-weight:600; font-size:12px; background:#fefce8;">${mSubj}</td>`;
+      }
+      morningCells += `<td style="border:1px solid #333; padding:5px; text-align:center; font-size:11px; background:#fefce8;">晨读诵读</td>`;
+      rowsHtml += `<tr>${morningCells}</tr>`;
+    }
+
     for (let pIdx = 0; pIdx < maxPeriods; pIdx++) {
       if (pIdx === 2) {
         rowsHtml += `
@@ -211,8 +268,16 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
 
       for (let dIdx = 0; dIdx < 5; dIdx++) {
         const day = dayCols[dIdx];
-        const subj = day?.periods[pIdx] || '—';
-        cellsHtml += `<td style="border:1px solid #333; padding:6px; font-weight:600; font-size:12px;">${subj}</td>`;
+        const rawSubj = day?.periods[pIdx];
+        const subjText =
+          typeof rawSubj === 'string'
+            ? rawSubj
+            : rawSubj
+            ? rawSubj.teacher
+              ? `${rawSubj.subject}<div style="font-size:9px; color:#666; font-weight:normal;">${rawSubj.teacher}</div>`
+              : rawSubj.subject
+            : '—';
+        cellsHtml += `<td style="border:1px solid #333; padding:6px; font-weight:600; font-size:12px;">${subjText}</td>`;
       }
 
       const weekendCell =
@@ -602,14 +667,14 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
           </div>
         </div>
 
-        {/* Step 3: Weekly Timetable Preview Grid (PC Left-Mouse Drag Scrollable) */}
+        {/* Step 3: Weekly Timetable Preview Grid (PC Left-Mouse Drag Scrollable + Click to Edit Cells & Morning Reading) */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-xs flex-wrap gap-1">
             <span className="font-bold text-on-surface">
-              📅 识别出的周一至周五课程表预览
+              📅 识别出的周一至周五课程表预览（保留同日重复科目与真实节次）
             </span>
             <span className="text-[11px] text-on-surface-variant">
-              💡 PC端可按住鼠标左键左右滑动课表
+              💡 点击任意早读或节次可快速切换科目 · PC端按住左键可滑动
             </span>
           </div>
           <div
@@ -619,7 +684,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
             }`}
           >
             <div className="grid grid-cols-5 gap-2 min-w-[520px]">
-              {recognitionResult.weeklyGrid.map((dayCol) => (
+              {recognitionResult.weeklyGrid.map((dayCol, dIdx) => (
                 <div
                   key={dayCol.day}
                   className="flex flex-col gap-1.5 p-2 rounded-xl bg-surface-container-low/60 border border-[#EAE4DA]/60"
@@ -627,13 +692,65 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                   <div className="text-center text-xs font-bold text-primary pb-1 border-b border-[#EAE4DA]">
                     {dayCol.day}
                   </div>
+                  {/* Interactive Morning Reading Row */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cycle = ['', '语文', '英语', '道法', '历史'];
+                      const cur = dayCol.morningReading || '';
+                      const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+                      setRecognitionResult((prev) => ({
+                        ...prev,
+                        weeklyGrid: prev.weeklyGrid.map((col, i) =>
+                          i === dIdx
+                            ? { ...col, morningReading: next || undefined }
+                            : col
+                        ),
+                      }));
+                    }}
+                    title="点击切换早读科目（无 / 语文 / 英语 / 道法 / 历史）"
+                    className="flex items-center justify-between px-2 py-1 rounded-lg bg-[#FEFCE8] hover:bg-[#FEF08A]/50 text-[10px] border border-[#FDE047]/60 cursor-pointer transition-colors"
+                  >
+                    <span className="text-[#854D0E] font-semibold">早读</span>
+                    <span className="font-bold text-[#713F12]">
+                      {dayCol.morningReading || '点此设置'}
+                    </span>
+                  </button>
+
                   {dayCol.periods.map((subjItem, idx) => {
                     const subjName =
                       typeof subjItem === 'string' ? subjItem : subjItem.subject;
+                    const teacherName =
+                      typeof subjItem === 'string' ? undefined : subjItem.teacher;
                     return (
-                      <div
+                      <button
                         key={`${dayCol.day}-${idx}`}
-                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-white text-[11px] border border-[#EAE4DA]/50"
+                        type="button"
+                        onClick={() => {
+                          const cyclePool =
+                            selectedSubjects.length > 0
+                              ? selectedSubjects
+                              : ['语文', '数学', '英语', '生物', '地理', '历史', '道法', '体育锻炼'];
+                          const curIdx = cyclePool.indexOf(subjName);
+                          const nextSubj =
+                            cyclePool[(curIdx + 1) % cyclePool.length];
+                          setRecognitionResult((prev) => ({
+                            ...prev,
+                            weeklyGrid: prev.weeklyGrid.map((col, i) => {
+                              if (i !== dIdx) return col;
+                              const nextPeriods = col.periods.map((p, pIdx) =>
+                                pIdx === idx
+                                  ? typeof p === 'string'
+                                    ? nextSubj
+                                    : { ...p, subject: nextSubj }
+                                  : p
+                              );
+                              return { ...col, periods: nextPeriods };
+                            }),
+                          }));
+                        }}
+                        title={`点击切换 ${dayCol.day} 第${idx + 1}节 科目`}
+                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-white hover:bg-primary-fixed/20 text-[11px] border border-[#EAE4DA]/50 cursor-pointer transition-colors"
                       >
                         <span className="text-[10px] text-outline">
                           第{idx + 1}节
@@ -644,8 +761,9 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                           )}`}
                         >
                           {subjName}
+                          {teacherName ? `·${teacherName}` : ''}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

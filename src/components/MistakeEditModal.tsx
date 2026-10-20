@@ -137,10 +137,8 @@ export const MistakeEditModal: React.FC<MistakeEditModalProps> = ({
 
   const handleDeleteCurrent = () => {
     if (!initialMistake || !onDelete) return;
-    if (window.confirm(`确定要彻底删除错题「${initialMistake.title}」吗？删除后不可撤回。`)) {
-      onDelete(initialMistake.id);
-      onClose();
-    }
+    onDelete(initialMistake.id);
+    onClose();
   };
 
   return createPortal(
@@ -177,7 +175,7 @@ export const MistakeEditModal: React.FC<MistakeEditModalProps> = ({
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer shrink-0"
           >
-            ✕
+            <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
 

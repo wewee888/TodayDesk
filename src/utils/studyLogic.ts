@@ -1,6 +1,8 @@
 import type {
   AttendanceStatus,
+  EfficiencyBubble,
   ExamPeriod,
+  ExamScoreCard,
   HomeworkTask,
   MistakeItem,
   ParsedVoiceTask,
@@ -10,6 +12,7 @@ import type {
   TimetableDaySchedule,
   TimetablePeriodDetail,
   TimetableRecognitionResult,
+  WeeklyReportAI,
 } from '../types/study.ts';
 
 export interface SubjectMeta {
@@ -1459,6 +1462,17 @@ const KNOWN_TIMETABLE_SUBJECTS: {
   normalized: SubjectName;
   isAcademic: boolean;
 }[] = [
+  { keyword: '道德与法治', normalized: '道法', isAcademic: true },
+  { keyword: '思想政治', normalized: '政治', isAcademic: true },
+  { keyword: '信息科技', normalized: '信息科技', isAcademic: false },
+  { keyword: '信息技术', normalized: '信息科技', isAcademic: false },
+  { keyword: '心理健康', normalized: '心理健康', isAcademic: false },
+  { keyword: '素质选修', normalized: '素质选修', isAcademic: false },
+  { keyword: '劳动实践', normalized: '劳动教育', isAcademic: false },
+  { keyword: '劳动教育', normalized: '劳动教育', isAcademic: false },
+  { keyword: '综合实践', normalized: '综合实践', isAcademic: false },
+  { keyword: '延时辅导', normalized: '延时辅导', isAcademic: false },
+  { keyword: '体育锻炼', normalized: '体育锻炼', isAcademic: false },
   { keyword: '语文', normalized: '语文', isAcademic: true },
   { keyword: '数学', normalized: '数学', isAcademic: true },
   { keyword: '英语', normalized: '英语', isAcademic: true },
@@ -1469,7 +1483,6 @@ const KNOWN_TIMETABLE_SUBJECTS: {
   { keyword: '地理', normalized: '地理', isAcademic: true },
   { keyword: '生物', normalized: '生物', isAcademic: true },
   { keyword: '道法', normalized: '道法', isAcademic: true },
-  { keyword: '道德与法治', normalized: '道法', isAcademic: true },
   { keyword: '政治', normalized: '政治', isAcademic: true },
   { keyword: '科学', normalized: '科学', isAcademic: true },
   { keyword: '信息', normalized: '信息科技', isAcademic: false },
@@ -1481,14 +1494,96 @@ const KNOWN_TIMETABLE_SUBJECTS: {
   { keyword: '音乐', normalized: '音乐', isAcademic: false },
   { keyword: '书法', normalized: '书法', isAcademic: false },
   { keyword: '心理', normalized: '心理健康', isAcademic: false },
+  { keyword: '劳动', normalized: '劳动教育', isAcademic: false },
   { keyword: '选修', normalized: '素质选修', isAcademic: false },
   { keyword: '素质', normalized: '素质选修', isAcademic: false },
   { keyword: '班会', normalized: '班会', isAcademic: false },
+  { keyword: '自习', normalized: '自主自习', isAcademic: false },
+  { keyword: '阅读', normalized: '阅读', isAcademic: true },
+  { keyword: '写作', normalized: '作文', isAcademic: true },
+  { keyword: '作文', normalized: '作文', isAcademic: true },
   { keyword: '延时', normalized: '延时辅导', isAcademic: false },
   { keyword: '语延', normalized: '语延', isAcademic: true },
   { keyword: '数延', normalized: '数延', isAcademic: true },
   { keyword: '英延', normalized: '英延', isAcademic: true },
 ];
+
+/**
+ * Extracts all ordered subject occurrences from a text segment (preserving duplicates in the same day/row).
+ */
+export function extractOrderedSubjectsFromSegment(
+  segment: string
+): { subject: SubjectName; teacher?: string; isAcademic: boolean }[] {
+  const cleaned = segment
+    .replace(/第[一二三四五六七八九十\d]+[节课]/g, ' ')
+    .trim();
+  if (!cleaned) return [];
+
+  // First check if tokens are explicitly separated by spaces/delimiters
+  const rawTokens = cleaned
+    .split(/[、,，;；/｜|\t\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const results: { subject: SubjectName; teacher?: string; isAcademic: boolean }[] = [];
+
+  for (const token of rawTokens) {
+    // Check "科目(老师)" pattern like "历史(徐倩)"
+    const tMatch = token.match(/^([^(（]+)[(（]([^)）]+)[)）]$/);
+    if (tMatch) {
+      const rawSubj = tMatch[1].trim();
+      const teacher = tMatch[2].trim();
+      const matched = KNOWN_TIMETABLE_SUBJECTS.find((k) =>
+        rawSubj.includes(k.keyword)
+      );
+      results.push({
+        subject: matched ? matched.normalized : rawSubj,
+        teacher,
+        isAcademic: matched ? matched.isAcademic : true,
+      });
+      continue;
+    }
+
+    // Scan token left-to-right for one or more known subject keywords (handles both single "数学" and continuous "数学数学语文")
+    let cursor = 0;
+    let matchedInsideToken = 0;
+    while (cursor < token.length) {
+      const slice = token.slice(cursor);
+      let found: (typeof KNOWN_TIMETABLE_SUBJECTS)[number] | undefined;
+      for (const candidate of KNOWN_TIMETABLE_SUBJECTS) {
+        if (slice.startsWith(candidate.keyword)) {
+          found = candidate;
+          break;
+        }
+      }
+      if (found) {
+        results.push({
+          subject: found.normalized,
+          isAcademic: found.isAcademic,
+        });
+        cursor += found.keyword.length;
+        matchedInsideToken++;
+      } else {
+        cursor += 1;
+      }
+    }
+
+    // If token didn't match known keywords but is a short custom subject name (e.g. "人工智能")
+    if (
+      matchedInsideToken === 0 &&
+      token.length >= 2 &&
+      token.length <= 6 &&
+      !/^(周一|周二|周三|周四|周五|星期|上午|下午|午休|大课间|课表)/.test(token)
+    ) {
+      results.push({
+        subject: token,
+        isAcademic: true,
+      });
+    }
+  }
+
+  return results;
+}
 
 export function parseTimetableContent(
   rawText: string,
@@ -1509,8 +1604,19 @@ export function parseTimetableContent(
     }
   }
 
-  // Check if rawText contains structured daily lines e.g. "周一：历史(徐倩)、语文(何川)..."
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const days: ('周一' | '周二' | '周三' | '周四' | '周五')[] = [
+    '周一',
+    '周二',
+    '周三',
+    '周四',
+    '周五',
+  ];
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
   const dayMap: Record<
     string,
     { morningReading?: string; periods: (string | TimetablePeriodDetail)[] }
@@ -1523,64 +1629,120 @@ export function parseTimetableContent(
   };
   let foundStructuredDay = false;
 
+  // Strategy A: Day-by-day lines e.g. "周一：语文、数学、数学、英语..." or "星期一 语文 数学..."
   for (const line of lines) {
-    const match = line.match(/^(周[一二三四五]|星期[一二三四五])[：:\s](.*)/);
+    if (/^(?:📅\s*)?(周一|星期一).*(周二|星期二).*(周三|星期三)/.test(line)) {
+      continue;
+    }
+    const match = line.match(
+      /^(?:📅\s*)?(周[一二三四五]|星期[一二三四五])[：:\s、,，|-]*(.*)/
+    );
     if (match) {
       foundStructuredDay = true;
       const dayKey = match[1].replace('星期', '周');
-      const content = match[2];
-      const items = content
-        .split(/[、,，\t\s]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const parsedPeriods: (string | TimetablePeriodDetail)[] = [];
+      let restContent = match[2].trim();
       let morning = '';
+
+      // Extract optional morning reading prefix e.g. "早读：英语" or "早读(语文)" or "早读语文"
+      const morningMatch = restContent.match(
+        /^早读[：:(\s（]*([语数英文政史地生道法]+)?[)）]?[、,，\s]*(.*)/
+      );
+      if (morningMatch) {
+        morning = morningMatch[1]?.trim() || '早读';
+        restContent = morningMatch[2] || '';
+      }
+
+      const extracted = extractOrderedSubjectsFromSegment(restContent);
+      const parsedPeriods: (string | TimetablePeriodDetail)[] = [];
       let pIdx = 1;
 
-      for (const item of items) {
-        if (item.includes('早读')) {
-          morning = item.replace(/早读[：:]?/, '').trim() || '早读';
+      for (const entry of extracted) {
+        if (entry.isAcademic) {
+          detectedAcademic.add(entry.subject);
         } else {
-          // parse teacher if format like "历史(徐倩)" or "语文(何川)"
-          const tMatch = item.match(/^([^(（]+)[(（]([^)）]+)[)）]$/);
-          if (tMatch) {
-            const subj = tMatch[1].trim();
-            const teacher = tMatch[2].trim();
-            parsedPeriods.push({
-              periodIndex: pIdx++,
-              subject: subj,
-              teacher: teacher,
-            });
-            for (const k of KNOWN_TIMETABLE_SUBJECTS) {
-              if (subj.includes(k.keyword)) {
-                if (k.isAcademic) detectedAcademic.add(k.normalized);
-                else detectedExtra.add(k.normalized);
-                break;
-              }
-            }
-          } else {
-            parsedPeriods.push({
-              periodIndex: pIdx++,
-              subject: item,
-            });
-            for (const k of KNOWN_TIMETABLE_SUBJECTS) {
-              if (item.includes(k.keyword)) {
-                if (k.isAcademic) detectedAcademic.add(k.normalized);
-                else detectedExtra.add(k.normalized);
-                break;
-              }
-            }
-          }
+          detectedExtra.add(entry.subject);
+        }
+        parsedPeriods.push({
+          periodIndex: pIdx++,
+          subject: entry.subject,
+          ...(entry.teacher ? { teacher: entry.teacher } : {}),
+        });
+      }
+
+      if (dayMap[dayKey]) {
+        dayMap[dayKey] = {
+          morningReading: morning || undefined,
+          periods: parsedPeriods,
+        };
+      }
+    }
+  }
+
+  // Strategy B: Period-by-period rows across Mon-Fri columns e.g. "第1节 语文 数学 英语 语文 数学"
+  if (!foundStructuredDay) {
+    const periodRows: {
+      isMorning?: boolean;
+      subjects: { subject: SubjectName; teacher?: string; isAcademic: boolean }[];
+    }[] = [];
+
+    for (const line of lines) {
+      if (/^(周一|星期一).*(周二|星期二).*(周三|星期三)/.test(line)) {
+        continue; // Skip header row
+      }
+      if (/^(午休|午餐|大课间|眼保健操|阳光体育)/.test(line)) {
+        continue; // Skip break rows
+      }
+      const morningRowMatch = line.match(/^早读[：:\s、,，|-]*(.+)$/);
+      if (morningRowMatch) {
+        const subjs = extractOrderedSubjectsFromSegment(morningRowMatch[1]);
+        if (subjs.length >= 2) {
+          periodRows.push({ isMorning: true, subjects: subjs });
+        }
+        continue;
+      }
+
+      const periodRowMatch = line.match(
+        /^(?:第\s*[一二三四五六七八九十\d]+\s*[节课]|[1-9]\s*[节课.]|上午第?[一二三四1-4]节|下午第?[一二三四五5-9]节)[：:\s、,，|-]*(.+)$/
+      );
+      if (periodRowMatch) {
+        const subjs = extractOrderedSubjectsFromSegment(periodRowMatch[1]);
+        if (subjs.length > 0) {
+          periodRows.push({ isMorning: false, subjects: subjs });
         }
       }
-      if (dayMap[dayKey]) {
-        dayMap[dayKey] = { morningReading: morning, periods: parsedPeriods };
+    }
+
+    if (periodRows.length > 0) {
+      foundStructuredDay = true;
+      let periodCounter = 1;
+      for (const row of periodRows) {
+        if (row.isMorning) {
+          days.forEach((day, dIdx) => {
+            if (row.subjects[dIdx]) {
+              dayMap[day].morningReading = row.subjects[dIdx].subject;
+            }
+          });
+        } else {
+          const currentPIdx = periodCounter++;
+          days.forEach((day, dIdx) => {
+            const cell = row.subjects[dIdx];
+            if (cell) {
+              if (cell.isAcademic) detectedAcademic.add(cell.subject);
+              else detectedExtra.add(cell.subject);
+              dayMap[day].periods.push({
+                periodIndex: currentPIdx,
+                subject: cell.subject,
+                ...(cell.teacher ? { teacher: cell.teacher } : {}),
+              });
+            }
+          });
+        }
       }
     }
   }
 
   // If no explicit keywords matched (e.g., binary image upload without OCR text), use grade-appropriate full curriculum
-  if (detectedAcademic.size === 0) {
+  if (detectedAcademic.size === 0 && !foundStructuredDay) {
     if (gradePreset === 'grade7') {
       ['语文', '数学', '英语', '历史', '地理', '生物', '道法'].forEach((s) =>
         detectedAcademic.add(s)
@@ -1605,17 +1767,10 @@ export function parseTimetableContent(
     new Set([...academicSubjects, ...extraSubjects])
   );
 
-  const days: ('周一' | '周二' | '周三' | '周四' | '周五')[] = [
-    '周一',
-    '周二',
-    '周三',
-    '周四',
-    '周五',
-  ];
-
   let weeklyGrid: TimetableDaySchedule[] = [];
 
   if (foundStructuredDay) {
+    // Preserve exact parsed periods per day without padding fake default subjects
     weeklyGrid = days.map((day) => ({
       day,
       dayName: day,
@@ -1623,7 +1778,7 @@ export function parseTimetableContent(
       periods: dayMap[day].periods,
     }));
   } else {
-    // Build a realistic 5-day x 7-period timetable grid from the detected subjects
+    // Fallback template grid ONLY when input has no structured day or period lines at all
     const pool =
       academicSubjects.length > 0
         ? academicSubjects
@@ -1911,5 +2066,219 @@ export function computeTeacherAllCorrectSyncSummary(
   };
 }
 
+export function computeMistakeArchiveCounts(
+  mistakes: MistakeItem[],
+  isDemoPurged = false
+): {
+  remainingMistakes: number;
+  clearedCount: number;
+  totalCount: number;
+} {
+  const remainingMistakes = mistakes.filter((m) => !m.cleared).length;
+  const realCleared = mistakes.filter((m) => m.cleared).length;
+  const clearedCount = (isDemoPurged ? 0 : 5) + realCleared;
+  return {
+    remainingMistakes,
+    clearedCount,
+    totalCount: remainingMistakes + clearedCount,
+  };
+}
 
+export function computeDynamicEfficiencyBubbles(
+  tasks: HomeworkTask[],
+  examScores: ExamScoreCard[],
+  fallbackBubbles: EfficiencyBubble[],
+  isDemoPurged = false
+): EfficiencyBubble[] {
+  if (!isDemoPurged && examScores.length > 0 && tasks.length > 0) {
+    return fallbackBubbles;
+  }
+  if (examScores.length === 0 && tasks.length === 0) {
+    return [];
+  }
+
+  const subjects = Array.from(
+    new Set([
+      ...examScores.map((c) => c.subject),
+      ...tasks
+        .map((t) => t.subject)
+        .filter((s) => s !== '体育锻炼' && s !== '课余兴趣' && s !== '自主自习'),
+    ])
+  ).slice(0, 4);
+
+  if (subjects.length === 0) return [];
+
+  const positions = [
+    'top-4 right-8',
+    'top-8 left-12',
+    'bottom-7 right-28',
+    'bottom-8 left-28',
+  ];
+  const sizes = ['w-16 h-16', 'w-14 h-14', 'w-15 h-15', 'w-13 h-13'];
+  const schemes: ('primary' | 'secondary' | 'tertiary')[] = [
+    'secondary',
+    'primary',
+    'tertiary',
+    'secondary',
+  ];
+
+  return subjects.map((subj, idx) => {
+    const subjMinutes = tasks
+      .filter((t) => t.subject === subj)
+      .reduce((sum, t) => sum + (t.actualMinutes ?? t.estimatedMinutes), 0);
+    const hours = Number(Math.max(0.5, subjMinutes / 60).toFixed(1));
+    const card = examScores.find((c) => c.subject === subj);
+    const scorePercent = card
+      ? Math.round((card.score / Math.max(card.fullScore, 1)) * 100)
+      : 85;
+    const isHigh = scorePercent >= 90;
+    return {
+      id: `dyn-bubble-${subj}`,
+      subject: subj,
+      hours: subjMinutes > 0 ? hours : 1.0,
+      scorePercent,
+      badgeText: card
+        ? `${card.score}/${card.fullScore} (${scorePercent}%)`
+        : `累计 ${subjMinutes}m`,
+      quadrantNote: isHigh
+        ? '高产出优势区 · 保持节奏，重点精炼压轴综合题。'
+        : '提分潜力区 · 建议结合周末错题清账，把易混概念吃透。',
+      colorScheme: schemes[idx % schemes.length],
+      positionClass: positions[idx % positions.length],
+      sizeClass: sizes[idx % sizes.length],
+    };
+  });
+}
+
+export function buildDynamicWeeklyReport(params: {
+  studentName: string;
+  gradeClass: string;
+  tasks: HomeworkTask[];
+  mistakes: MistakeItem[];
+  examScores: ExamScoreCard[];
+  isDemoPurged: boolean;
+  defaultReport: WeeklyReportAI;
+}): WeeklyReportAI {
+  const {
+    studentName,
+    gradeClass,
+    tasks,
+    mistakes,
+    examScores,
+    isDemoPurged,
+    defaultReport,
+  } = params;
+
+  const allCorrectSummary = computeTeacherAllCorrectSyncSummary(tasks);
+  const activeMistakes = mistakes.filter((m) => !m.cleared);
+  const totalMinutes = tasks.reduce(
+    (sum, t) => sum + (t.actualMinutes ?? t.estimatedMinutes),
+    0
+  );
+  const completedCount = tasks.filter((t) => t.completed).length;
+
+  // If demo data is NOT purged and default demo items are still active, return default report enriched with real teacher verification count
+  if (!isDemoPurged) {
+    if (allCorrectSummary.allCorrectCount > 0) {
+      return {
+        ...defaultReport,
+        studentName: `${studentName} · ${gradeClass}`,
+        summaryParagraph: `${defaultReport.summaryParagraph} 家长今日已核对记录 ${allCorrectSummary.allCorrectCount}/${allCorrectSummary.totalTasks} 项作业「老师核对：全对」（全对率 ${allCorrectSummary.allCorrectRate}%）。`,
+      };
+    }
+    return {
+      ...defaultReport,
+      studentName: `${studentName} · ${gradeClass}`,
+    };
+  }
+
+  // Demo data is purged (or clean new user account): compute 100% from real tasks, mistakes, and examScores!
+  if (tasks.length === 0 && mistakes.length === 0 && examScores.length === 0) {
+    return {
+      studentName: `${studentName} · ${gradeClass}`,
+      weekLabel: '家庭学情与周末清账单 · 真实记录模式',
+      headline: `${studentName}的专属书桌已就绪 · 录入第一项作业即可生成学情周报 🌱`,
+      summaryParagraph:
+        '当前示范数据已清空，暂未产生本周学习与错题记录。平时在「今日书桌」记录作业时长、勾选「老师核对：全对」或收录错题后，系统将根据您的真实数据实时计算学科投产比与周末靶向清账单。',
+      highYieldSubject: '待开启记录（录入作业或考分后自动诊断）',
+      potentialSubject: '待开启记录（收录错题或作业后自动识别）',
+      encouragement:
+        '好的习惯始于每天 3 秒钟的轻快记录，不焦虑、不盲刷，每一步都算数！',
+      actionItems: [],
+    };
+  }
+
+  // Group real task minutes by subject
+  const subjectMinutesMap = new Map<SubjectName, number>();
+  for (const t of tasks) {
+    const mins = t.actualMinutes ?? t.estimatedMinutes;
+    subjectMinutesMap.set(
+      t.subject,
+      (subjectMinutesMap.get(t.subject) || 0) + mins
+    );
+  }
+  const sortedSubjects = Array.from(subjectMinutesMap.entries()).sort(
+    (a, b) => b[1] - a[1]
+  );
+
+  const topSubjectEntry = sortedSubjects[0];
+  const topHighYieldText = topSubjectEntry
+    ? `${topSubjectEntry[0]}（已规划 ${topSubjectEntry[1]} 分钟${
+        allCorrectSummary.verifiedSubjects.includes(topSubjectEntry[0])
+          ? ' · 老师核对全对 ✓'
+          : ''
+      }）`
+    : examScores[0]
+    ? `${examScores[0].subject}（考分 ${examScores[0].score}/${examScores[0].fullScore}）`
+    : '稳步积累中';
+
+  const potentialSubjText =
+    activeMistakes.length > 0
+      ? `${activeMistakes[0].subject}（待清账错题 ${activeMistakes.length} 道）`
+      : sortedSubjects.length > 1
+      ? `${sortedSubjects[sortedSubjects.length - 1][0]}（建议周末适度巩固）`
+      : '保持每日全对核对与错题收录即可';
+
+  const actionItems: WeeklyReportAI['actionItems'] = [];
+  for (const m of activeMistakes.slice(0, 3)) {
+    actionItems.push({
+      subject: m.subject,
+      task: `重做错题：${m.title}（${m.reasonText}）`,
+      minutes: 15,
+      priority: '必清',
+    });
+  }
+  for (const t of tasks.filter((item) => !item.completed).slice(0, 3 - actionItems.length)) {
+    actionItems.push({
+      subject: t.subject,
+      task: `完成待办：${t.title}`,
+      minutes: t.estimatedMinutes,
+      priority: '今日待办',
+    });
+  }
+  if (actionItems.length === 0 && topSubjectEntry) {
+    actionItems.push({
+      subject: topSubjectEntry[0],
+      task: `复盘本周「${topSubjectEntry[0]}」重点题型与课堂笔记`,
+      minutes: 15,
+      priority: '周末巩固',
+    });
+  }
+
+  return {
+    studentName: `${studentName} · ${gradeClass}`,
+    weekLabel: '家庭学情与周末清账单 · 真实数据汇总',
+    headline: `${studentName}本周已真实记录 ${tasks.length} 项任务（共 ${totalMinutes} 分钟） ✨`,
+    summaryParagraph: `${studentName}本周书桌共记录 ${tasks.length} 项真实任务（已完成 ${completedCount}/${tasks.length} 项，累计 ${totalMinutes} 分钟${
+      allCorrectSummary.allCorrectCount > 0
+        ? `，其中 ${allCorrectSummary.allCorrectCount} 项获老师核对全对，全对率 ${allCorrectSummary.allCorrectRate}%`
+        : ''
+    }），当前错题本待清账 ${activeMistakes.length} 道。系统已根据您的真实记录生成周末清账建议。`,
+    highYieldSubject: topHighYieldText,
+    potentialSubject: potentialSubjText,
+    encouragement:
+      '每一条真实的作业记录与错题销项，都是孩子稳步进阶的脚印。周末轻装上阵！',
+    actionItems,
+  };
+}
 

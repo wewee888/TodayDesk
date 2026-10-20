@@ -570,7 +570,7 @@ export const VoiceAndCameraModal: React.FC<VoiceAndCameraModalProps> = ({
                           className="w-6 h-6 rounded-full hover:bg-error-container/20 text-outline hover:text-error flex items-center justify-center cursor-pointer transition-colors text-xs"
                           title="移除此项"
                         >
-                          ✕
+                          <span className="material-symbols-outlined text-[14px]">close</span>
                         </button>
                       </div>
 

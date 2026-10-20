@@ -23,6 +23,7 @@ import {
   INITIAL_SCHEDULE_ITEMS,
 } from './data/initialData';
 import {
+  buildDynamicWeeklyReport,
   calculateDeskSummary,
   clearMistakeItem,
   getSubjectBadgeClass,
@@ -381,12 +382,13 @@ export default function App() {
     'voice' | 'camera' | null
   >(null);
   const [isWeeklyReportOpen, setIsWeeklyReportOpen] = useState(false);
-  const [weeklyReport, setWeeklyReport] = useState<WeeklyReportAI>(
-    DEFAULT_WEEKLY_REPORT
-  );
+  const [customAIWeeklyReport, setCustomAIWeeklyReport] =
+    useState<WeeklyReportAI | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showPurgeConfirmModal, setShowPurgeConfirmModal] = useState(false);
+  const [showRestoreConfirmModal, setShowRestoreConfirmModal] = useState(false);
 
   // Toast notification state
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -398,6 +400,25 @@ export default function App() {
     }, 2400);
   }, []);
 
+  const isPublicDemoAccount =
+    !currentUserProfile?.account ||
+    currentUserProfile.account === 'lizihan' ||
+    currentUserProfile.account === 'parent_li';
+
+  const effectiveIsDemoPurged = isDemoPurged || !isPublicDemoAccount;
+
+  const effectiveWeeklyReport =
+    customAIWeeklyReport ||
+    buildDynamicWeeklyReport({
+      studentName: deskSettings.studentName,
+      gradeClass: deskSettings.gradeClass,
+      tasks: homeworkTasks,
+      mistakes,
+      examScores: examDataMap[examPeriod] || [],
+      isDemoPurged: effectiveIsDemoPurged,
+      defaultReport: DEFAULT_WEEKLY_REPORT,
+    });
+
   // Desktop productivity keyboard shortcuts: [Esc] Close Modals, [Ctrl+K] Quick Capsule
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -405,23 +426,15 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // 1. Esc: close active modals
       if (e.key === 'Escape') {
-        if (
-          isQuickSheetOpen ||
-          isDeskSettingsOpen ||
-          isTimetableModalOpen ||
-          voiceOrCameraMode !== null ||
-          isWeeklyReportOpen ||
-          isScheduleModalOpen ||
-          showNotifications
-        ) {
-          setIsQuickSheetOpen(false);
-          setIsDeskSettingsOpen(false);
-          setIsTimetableModalOpen(false);
-          setVoiceOrCameraMode(null);
-          setIsWeeklyReportOpen(false);
-          setIsScheduleModalOpen(false);
-          setShowNotifications(false);
-        }
+        if (showPurgeConfirmModal) setShowPurgeConfirmModal(false);
+        else if (showRestoreConfirmModal) setShowRestoreConfirmModal(false);
+        else if (isWeeklyReportOpen) setIsWeeklyReportOpen(false);
+        else if (isTimetableModalOpen) setIsTimetableModalOpen(false);
+        else if (isDeskSettingsOpen) setIsDeskSettingsOpen(false);
+        else if (voiceOrCameraMode) setVoiceOrCameraMode(null);
+        else if (isScheduleModalOpen) setIsScheduleModalOpen(false);
+        else if (showNotifications) setShowNotifications(false);
+        else if (isQuickSheetOpen) setIsQuickSheetOpen(false);
         return;
       }
 
@@ -435,18 +448,28 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    isQuickSheetOpen,
-    isDeskSettingsOpen,
-    isTimetableModalOpen,
-    voiceOrCameraMode,
+    showPurgeConfirmModal,
+    showRestoreConfirmModal,
     isWeeklyReportOpen,
+    isTimetableModalOpen,
+    isDeskSettingsOpen,
+    voiceOrCameraMode,
     isScheduleModalOpen,
     showNotifications,
+    isQuickSheetOpen,
   ]);
 
-  // Cloudflare D1 Cloud Hydration: Sync latest user profile and settings from Cloudflare D1
+  // Cloudflare D1 Cloud Hydration:
+  // For independent family accounts registered by users, hydrate full state from D1.
+  // For the shared public demo account (lizihan), isolate state in visitor's localStorage so one visitor's purge/edits never overwrite another visitor's demo desk!
   useEffect(() => {
-    if (!currentUserProfile?.account || typeof window === 'undefined') return;
+    if (
+      !currentUserProfile?.account ||
+      isPublicDemoAccount ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
 
     let isMounted = true;
     const pullFromCloudD1 = async () => {
@@ -483,9 +506,10 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [currentUserProfile?.account]);
+  }, [currentUserProfile?.account, isPublicDemoAccount]);
 
   // Cloudflare D1 Sync Helper: Pushes changes to Cloudflare D1 in background
+  // Protects public demo account (lizihan) from destructive cloud overwrites so visitors don't pollute each other's demo template
   const syncToCloudD1 = useCallback(
     async (overrides?: {
       deskSettings?: DeskSettings;
@@ -502,6 +526,10 @@ export default function App() {
       deletedMistakeId?: string;
     }) => {
       if (!currentUserProfile?.account) return;
+      if (isPublicDemoAccount) {
+        // Public demo account keeps destructive changes isolated in localStorage
+        return;
+      }
       try {
         await fetch('/api/sync', {
           method: 'POST',
@@ -537,7 +565,15 @@ export default function App() {
         });
       } catch {}
     },
-    [currentUserProfile, deskSettings, homeworkTasks, schedules, mistakes, examDataMap]
+    [
+      currentUserProfile,
+      isPublicDemoAccount,
+      deskSettings,
+      homeworkTasks,
+      schedules,
+      mistakes,
+      examDataMap,
+    ]
   );
 
   // Handlers for Yesterday Review
@@ -902,13 +938,11 @@ export default function App() {
   };
 
   const handlePurgeAllMockData = () => {
-    if (
-      !window.confirm(
-        '确定要一键清空全部示范数据吗？\n\n将一次性清除：\n• 示例作业清单（已录入的非示范作业将完整保留）\n• 示例固定习惯日程与打卡（跳远、练琴等）\n• 昨日作业小复盘\n• 示例错题本记录\n• 档案中的示范考试成绩\n\n您的学生姓名、班级、已添加的真实作业和番茄钟等个性化配置将100%安全保留。'
-      )
-    ) {
-      return;
-    }
+    setShowPurgeConfirmModal(true);
+  };
+
+  const executePurgeAllMockData = () => {
+    setShowPurgeConfirmModal(false);
 
     // 1. Save backup snapshot in case user wants to restore
     try {
@@ -926,19 +960,31 @@ export default function App() {
 
     // 2. Filter OUT only demo data, preserving all user-created items
     const remainingTasks = homeworkTasks.filter((t) => !DEMO_TASK_IDS.has(t.id));
-    const remainingSchedules = schedules.filter((s) => !DEMO_SCHEDULE_IDS.has(s.id));
+    const remainingSchedules = schedules.filter(
+      (s) => !DEMO_SCHEDULE_IDS.has(s.id)
+    );
     const remainingMistakes = mistakes.filter((m) => !DEMO_MISTAKE_IDS.has(m.id));
 
     // 3. Clear demo exam scores in archive
     const cleanExamDataMap: Record<ExamPeriod, ExamScoreCard[]> = {
-      '周考': [],
+      周考: [],
       '10月月考': [],
       '11月月考': [],
-      '期中考试': [],
-      '期末考试': [],
-      '中考模拟': [],
+      期中考试: [],
+      期末考试: [],
+      中考模拟: [],
     };
 
+    const nextSettings: DeskSettings = {
+      ...deskSettings,
+      familyReflectionNote:
+        deskSettings.familyReflectionNote ===
+        INITIAL_DESK_SETTINGS.familyReflectionNote
+          ? ''
+          : deskSettings.familyReflectionNote,
+    };
+
+    setDeskSettings(nextSettings);
     setHomeworkTasks(remainingTasks);
     setSchedules(remainingSchedules);
     setReviewItems([]);
@@ -946,18 +992,36 @@ export default function App() {
     setMistakes(remainingMistakes);
     setExamDataMap(cleanExamDataMap);
     setIsDemoPurged(true);
+    setCustomAIWeeklyReport(null);
 
     try {
       localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
-      localStorage.setItem(STORAGE_KEY_HOMEWORK_TASKS, JSON.stringify(remainingTasks));
-      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(remainingSchedules));
+      localStorage.setItem(
+        STORAGE_KEY_DESK_SETTINGS,
+        JSON.stringify(nextSettings)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_HOMEWORK_TASKS,
+        JSON.stringify(remainingTasks)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_SCHEDULES,
+        JSON.stringify(remainingSchedules)
+      );
       localStorage.setItem(STORAGE_KEY_REVIEW_ITEMS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_REVIEW_DISMISSED, 'true');
-      localStorage.setItem(STORAGE_KEY_MISTAKES, JSON.stringify(remainingMistakes));
-      localStorage.setItem(STORAGE_KEY_EXAM_DATA_MAP, JSON.stringify(cleanExamDataMap));
+      localStorage.setItem(
+        STORAGE_KEY_MISTAKES,
+        JSON.stringify(remainingMistakes)
+      );
+      localStorage.setItem(
+        STORAGE_KEY_EXAM_DATA_MAP,
+        JSON.stringify(cleanExamDataMap)
+      );
     } catch {}
 
     syncToCloudD1({
+      deskSettings: nextSettings,
       homeworkTasks: remainingTasks,
       schedules: remainingSchedules,
       mistakes: remainingMistakes,
@@ -990,8 +1054,18 @@ export default function App() {
   };
 
   const handleRestoreAllMockData = () => {
-    if (!window.confirm('确定恢复系统初始的示范数据吗？')) return;
+    setShowRestoreConfirmModal(true);
+  };
 
+  const executeRestoreAllMockData = () => {
+    setShowRestoreConfirmModal(false);
+
+    const restoredSettings: DeskSettings = {
+      ...deskSettings,
+      familyReflectionNote: INITIAL_DESK_SETTINGS.familyReflectionNote,
+    };
+
+    setDeskSettings(restoredSettings);
     setHomeworkTasks(INITIAL_HOMEWORK_TASKS);
     setSchedules(INITIAL_SCHEDULE_ITEMS);
     setReviewItems(INITIAL_REVIEW_ITEMS);
@@ -999,9 +1073,14 @@ export default function App() {
     setMistakes(INITIAL_MISTAKE_ITEMS);
     setExamDataMap(EXAM_DATA_BY_PERIOD);
     setIsDemoPurged(false);
+    setCustomAIWeeklyReport(null);
 
     try {
       localStorage.removeItem(STORAGE_KEY_DEMO_PURGED);
+      localStorage.setItem(
+        STORAGE_KEY_DESK_SETTINGS,
+        JSON.stringify(restoredSettings)
+      );
       localStorage.setItem(
         STORAGE_KEY_HOMEWORK_TASKS,
         JSON.stringify(INITIAL_HOMEWORK_TASKS)
@@ -1026,6 +1105,7 @@ export default function App() {
     } catch {}
 
     syncToCloudD1({
+      deskSettings: restoredSettings,
       homeworkTasks: INITIAL_HOMEWORK_TASKS,
       schedules: INITIAL_SCHEDULE_ITEMS,
       mistakes: INITIAL_MISTAKE_ITEMS,
@@ -1119,7 +1199,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.report) {
-          setWeeklyReport(data.report);
+          setCustomAIWeeklyReport(data.report);
           showToast('AI 家庭学情周报已更新 ✨');
         }
       }
@@ -1182,9 +1262,7 @@ export default function App() {
     showToast(
       isNewRegistration
         ? `注册成功！已为您创建「${profile.studentName}」(${profile.gradeClass})的全新专属书桌，快来录入第一条作业吧 ✨`
-        : `欢迎回来，${profile.studentName}（${profile.gradeClass} · ${
-            profile.role === 'parent' ? '家长伴学' : '学生书桌'
-          }）✨`
+        : `欢迎回来，${profile.studentName}（${profile.gradeClass}）✨`
     );
   };
 
@@ -1360,50 +1438,8 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: Contextual Actions (Role Switcher, Notifications, Settings, Profile) */}
+          {/* Zone 3: Contextual Actions (Notifications, Settings, Profile) */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Student Focus vs Parent Companion Role Switcher */}
-            <button
-              type="button"
-              onClick={() => {
-                const nextRole: 'student' | 'parent' =
-                  currentUserProfile?.role === 'parent' ? 'student' : 'parent';
-                const updated: UserAccountProfile = {
-                  account: 'lizihan',
-                  studentName: deskSettings.studentName,
-                  gradeClass: deskSettings.gradeClass,
-                  targetGoal: '考入成都市重点高中重点班',
-                  ...(currentUserProfile || {}),
-                  role: nextRole,
-                };
-                setCurrentUserProfile(updated);
-                try {
-                  localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(updated));
-                } catch {}
-                showToast(
-                  nextRole === 'parent'
-                    ? '已切换为「👨‍👩‍👧 家长静默伴学」视角 · 开启学情概览与暖心便签'
-                    : '已切换为「🧑‍🎓 学生心流专注」视角 · 开启番茄钟沉浸攻坚'
-                );
-              }}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap border shadow-2xs active:scale-95 ${
-                currentUserProfile?.role === 'parent'
-                  ? 'bg-amber-100 text-amber-900 border-amber-300'
-                  : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-              }`}
-              title="轻点在「学生心流专注」与「家长静默伴学」视角间一键切换"
-            >
-              <span className="material-symbols-outlined text-[15px]">
-                {currentUserProfile?.role === 'parent'
-                  ? 'family_restroom'
-                  : 'psychology'}
-              </span>
-              <span>
-                {currentUserProfile?.role === 'parent'
-                  ? '家长伴学视角'
-                  : '学生专注视角'}
-              </span>
-            </button>
 
             <div className="relative">
               <button
@@ -1658,27 +1694,48 @@ export default function App() {
                     </div>
                   )}
 
-                {/* 0.5. User Added Task Recovery Banner (e.g. if wiped during demo purge) */}
-                {!homeworkTasks.some(
-                  (t) => t.subject === '数学' && t.estimatedMinutes === 22
-                ) && (
-                  <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary-container/40 border border-secondary/25 text-xs text-on-surface shadow-2xs animate-fade-slide">
+                {/* 0.5. Clean Purged State Banner OR User Task Recovery Banner */}
+                {isDemoPurged && homeworkTasks.length === 0 ? (
+                  <div className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-secondary-container/30 border border-secondary/20 text-xs text-on-surface">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="material-symbols-outlined text-secondary text-[18px] shrink-0">
-                        restore
+                      <span className="material-symbols-outlined text-secondary text-[17px] shrink-0">
+                        verified
                       </span>
                       <span className="truncate font-medium">
-                        检测到您此前录入的作业「数学 · 作业练习 (22分钟)」
+                        示范数据已全部清空 · 右侧快记或底部语音即可录入专属作业
                       </span>
                     </div>
                     <button
                       type="button"
-                      onClick={handleRestoreUserTask}
-                      className="text-secondary hover:text-on-secondary-container font-bold cursor-pointer shrink-0 ml-2 text-[11px] bg-white px-3 py-1 rounded-full border border-secondary/35 shadow-2xs hover:bg-secondary-container/30 transition-colors"
+                      onClick={handleRestoreAllMockData}
+                      className="text-on-surface-variant hover:text-primary font-semibold cursor-pointer shrink-0 ml-2 text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-[#EAE4DA] transition-colors"
                     >
-                      一键找回恢复 ✓
+                      恢复示范数据
                     </button>
                   </div>
+                ) : (
+                  !isDemoPurged &&
+                  !homeworkTasks.some(
+                    (t) => t.subject === '数学' && t.estimatedMinutes === 22
+                  ) && (
+                    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary-container/40 border border-secondary/25 text-xs text-on-surface shadow-2xs animate-fade-slide">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-secondary text-[18px] shrink-0">
+                          restore
+                        </span>
+                        <span className="truncate font-medium">
+                          检测到您此前录入的作业「数学 · 作业练习 (22分钟)」
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRestoreUserTask}
+                        className="text-secondary hover:text-on-secondary-container font-bold cursor-pointer shrink-0 ml-2 text-[11px] bg-white px-3 py-1 rounded-full border border-secondary/35 shadow-2xs hover:bg-secondary-container/30 transition-colors"
+                      >
+                        一键找回恢复 ✓
+                      </button>
+                    </div>
+                  )
                 )}
 
                 {/* 1. Conditional Top Review Banner (昨日作业小复盘) */}
@@ -1746,9 +1803,25 @@ export default function App() {
               >
                 <InsightsArchiveView
                   tasks={homeworkTasks}
+                  onAddTaskRecord={(newTask) => {
+                    const next = [newTask, ...homeworkTasks];
+                    setHomeworkTasks(next);
+                    syncToCloudD1({ homeworkTasks: next });
+                  }}
+                  onUpdateTaskRecord={handleUpdateTask}
+                  onDeleteTaskRecord={handleDeleteTask}
+                  peExercises={deskSettings.peExercises}
+                  extracurricularActivities={deskSettings.extracurricularActivities}
                   mistakes={mistakes}
                   gradeClass={deskSettings.gradeClass}
-                  isDemoPurged={isDemoPurged}
+                  isDemoPurged={effectiveIsDemoPurged}
+                  familyReflectionNote={deskSettings.familyReflectionNote}
+                  onUpdateReflectionNote={(note) =>
+                    handleUpdateDeskSettings({
+                      ...deskSettings,
+                      familyReflectionNote: note,
+                    })
+                  }
                   onClearMistake={handleClearMistake}
                   onRestoreMistake={handleRestoreMistake}
                   onDeleteMistake={handleDeleteMistake}
@@ -1757,9 +1830,7 @@ export default function App() {
                   onAddMistake={handleAddMistake}
                   examPeriod={examPeriod}
                   onSelectExamPeriod={setExamPeriod}
-                  examScores={
-                    examDataMap[examPeriod] || []
-                  }
+                  examScores={examDataMap[examPeriod] || []}
                   onUpdateExamScores={handleUpdateExamScores}
                   customSubjects={deskSettings.customSubjects}
                   onOpenCameraSnap={() => setVoiceOrCameraMode('camera')}
@@ -2036,7 +2107,7 @@ export default function App() {
           <WeeklyReportModal
             isOpen={isWeeklyReportOpen}
             onClose={() => setIsWeeklyReportOpen(false)}
-            report={weeklyReport}
+            report={effectiveWeeklyReport}
             isGenerating={isGeneratingReport}
             onRefreshAIReport={handleRefreshAIWeeklyReport}
             onAddActionToDesk={(subject, taskType, minutes, title) => {
@@ -2054,6 +2125,123 @@ export default function App() {
           />
         )}
       </React.Suspense>
+
+      {/* Tactile Confirmation Modal for Purging Demo Data */}
+      {showPurgeConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setShowPurgeConfirmModal(false)}
+        >
+          <div
+            className="bg-[#FDFBF7] rounded-3xl max-w-md w-full p-5 shadow-2xl border border-[#EAE4DA] space-y-4 animate-scale-pop"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="确认清空示范数据"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-primary-fixed/60 text-primary flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[22px]">
+                    cleaning_services
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-on-surface">
+                    一键清空全部示范数据？
+                  </h3>
+                  <p className="text-xs text-on-surface-variant">
+                    开启干净、纯粹的家庭专属书桌与成长档案
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirmModal(false)}
+                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  close
+                </span>
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-surface-container-low border border-[#EAE4DA]/70 text-xs text-on-surface-variant space-y-1.5">
+              <div className="font-bold text-on-surface">将一次性清除以下初始示范内容：</div>
+              <ul className="list-disc list-inside space-y-1">
+                <li>示例作业清单（您自行录入的真实作业将完整保留）</li>
+                <li>示例固定习惯日程、昨日作业小复盘与示范错题</li>
+                <li>成长档案中的示范考试成绩、多维报表兜底时长与效能气泡</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirmModal(false)}
+                className="px-4 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={executePurgeAllMockData}
+                className="px-5 py-2 rounded-full bg-primary hover:bg-primary-container text-on-primary text-xs font-bold shadow-sm cursor-pointer transition-all active:scale-95"
+              >
+                确认清空示范数据 ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tactile Confirmation Modal for Restoring Demo Data */}
+      {showRestoreConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setShowRestoreConfirmModal(false)}
+        >
+          <div
+            className="bg-[#FDFBF7] rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-[#EAE4DA] space-y-4 animate-scale-pop"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="确认恢复示范数据"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-on-surface">
+                恢复系统初始示范数据？
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowRestoreConfirmModal(false)}
+                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  close
+                </span>
+              </button>
+            </div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              将恢复示例作业清单、固定日程、示范错题本以及成长档案中的各期示范成绩单。
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRestoreConfirmModal(false)}
+                className="px-4 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={executeRestoreAllMockData}
+                className="px-4 py-2 rounded-full bg-secondary text-on-secondary text-xs font-bold shadow-sm cursor-pointer"
+              >
+                确认恢复 ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

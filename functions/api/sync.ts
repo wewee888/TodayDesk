@@ -80,6 +80,7 @@ export async function onRequestGet(context: any): Promise<Response> {
           estimatedMinutes: t.estimated_minutes,
           completed: Boolean(t.completed),
           completedPomodoros: t.completed_pomodoros || 0,
+          taskDate: t.task_date || undefined,
         })),
         schedules: (schedulesRes?.results || []).map((s: any) => ({
           id: s.id,
@@ -159,8 +160,10 @@ export async function onRequestPost(context: any): Promise<Response> {
 
     const statements: any[] = [];
 
-    // Support one-click purge of ONLY mock/demo data for this account (preserving user-created tasks, schedules and mistakes!)
-    if (payload.purgeMockData === true) {
+    const isPublicDemo = account === 'lizihan' || account === 'parent_li';
+
+    // Support one-click purge of ONLY mock/demo data for user accounts (protecting the shared public demo master template!)
+    if (payload.purgeMockData === true && !isPublicDemo) {
       statements.push(
         env.DB.prepare(
           "DELETE FROM homework_tasks WHERE account = ? AND id IN ('task-1', 'task-2', 'task-3', 'task-4')"
