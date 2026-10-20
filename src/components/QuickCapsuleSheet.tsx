@@ -73,6 +73,7 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
   const [selectedTask, setSelectedTask] = useState<string>('错题订正');
   const [minutes, setMinutes] = useState<number>(45);
   const [justSubmitted, setJustSubmitted] = useState<boolean>(false);
+  const [customNote, setCustomNote] = useState<string>('');
 
   // Inline Subject Add / Rename state directly inside QuickCapsuleSheet
   const [showSubjectManager, setShowSubjectManager] = useState<boolean>(false);
@@ -239,8 +240,6 @@ export const QuickCapsuleSheet: React.FC<QuickCapsuleSheetProps> = ({
       setMinutes(15);
     }
   };
-
-  const [customNote, setCustomNote] = useState<string>('');
 
   const handleSubmit = () => {
     const cfg = activityConfigs?.[selectedTask];

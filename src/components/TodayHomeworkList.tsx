@@ -133,6 +133,7 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
   const [editTitle, setEditTitle] = useState<string>('');
   const [editMinutes, setEditMinutes] = useState<string>('30');
   const [editActualMinutes, setEditActualMinutes] = useState<string>('30');
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   const availableSubjects = Array.from(
     new Set([...getDefaultSubjectsForGrade(gradeClass), ...customSubjects])
@@ -236,8 +237,6 @@ export const TodayHomeworkList: React.FC<TodayHomeworkListProps> = ({
     }
     setEditingTaskId(null);
   };
-
-  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   const allCorrectCount = tasks.filter(
     (t) =>
