@@ -10,3 +10,6 @@ coverage/
 .study-desk-state.json
 .playwright-cli/
 .aistudio/
+bun.lock
+bun.lockb
+public/assets/aistudio/

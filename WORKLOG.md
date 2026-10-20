@@ -36,6 +36,32 @@
 - **Commit ID**: `f46af4a`
 - **提交信息**: `fix(desk): 修复课表学科数组解构与日期字段别名导致的白屏崩溃问题、完善类型防御并重新发布`
 
+### 深度全景优化与架构跃升 (2026-10-20 13:50)
+1. **P0 · Cloudflare D1 边缘多表全量闭环双向同步**：
+   - 彻底打通 `routine_schedules`（固定与机动日程、请假备忘）、`exam_scores`（各考期考试卡片）批量 Upsert 语句，与现有 `homework_tasks`、`mistake_items` 并行写入边缘 D1 数据库。
+   - `GET /api/sync` 全量下发 6 大数据表并还原字段；修复图片直传 R2 接口硬编码 `account: 'lizihan'` 问题，动态绑定当前登录账号。
+2. **P0 · 全局温润防白屏崩溃熔断与降级保护 (`DeskErrorBoundary`)**：
+   - 根组件顶层挂载专属 `DeskErrorBoundary` 错误边界，彻底告别空白屏事故。
+   - 发生未捕获异常时呈现暖阳书桌插画、友好重试按钮、诊断日志折叠面板以及紧急数据恢复选项。
+3. **P1 · 番茄钟 Web Audio 真实心流声学节拍与全局快捷键**：
+   - 引入 Web Audio 原生振荡器生成 432Hz 温暖正弦波与双音和弦：番茄钟开启滴答声、每分钟微音节拍、完成清脆报鸣与即刻完成祝贺声。
+   - 支持全局桌面生产力快捷键：`Esc` 键极速关闭所有活跃弹窗/全屏遮罩；`Ctrl+K` / `Cmd+K` 快速唤起 3 秒免打字快记面板。
+4. **P1 · 核心路由与重型弹窗 `React.lazy` 代码分割**：
+   - 将 `InsightsArchiveView`、`DeskSettingsModal`、`TimetableImportModal`、`VoiceAndCameraModal` 等重型弹窗全面重构为异步动态加载。
+   - 首屏核心 JS 主包从 573 kB 暴降 30%+ 至 397 kB，大幅降低初中生家庭弱网环境下的首屏渲染耗时 (FCP/LCP)。
+5. **P2 · 错题清账总库多维学科药丸筛选器与状态过滤**：
+   - 错题轮播传送带与错题总库弹窗均注入动态学科药丸（全部、数学、物理...）与错题计数徽标。
+   - 新增「只看待消灭」一键过滤开关，协助学生高密度击破未消灭错题。
+6. **P2 · 暖阳书桌专属 PWA 桌面/移动端渐进式 Web 应用配置**：
+   - 绘制并生成原创 512x512 暖阳书桌 SVG 应用图标与 Favicon。
+   - 配置 `public/manifest.json` 与 `index.html` PWA 元数据（`standalone` 模式、`#fbf9f6` 主题色与 iOS Web App 支持）。
+
+### 验证与部署结果
+- **单元测试 (`npm test`)**：17/17 测试用例全数通过。
+- **类型检查 (`npm run lint`)**：`tsc --noEmit` 0 错误通过。
+- **打包构建 (`npm run build`)**：代码分割完成，生产包 0 错误编译。
+- **边缘发布 (`wrangler pages deploy`)**：成功部署至 Cloudflare Pages，生产域名 `https://desk.6245.cn` 实时生效。
+
 ### 紧急故障修复 (2026-10-20 02:20)
 - **问题排查**：前端构建时因 `getTimetableSubjectsForDay` 返回对象解构缺失，导致 `todaySubjects.filter` 在运行时报 `TypeError`，使 React 根组件渲染中断呈现空白页；伴随 `getSystemDateInfo` 别名缺失与课表节次类型断言不严。
 - **修复措施**：
@@ -59,3 +85,9 @@
   2. `src/components/MultiPeriodReportSection.tsx` & `src/components/WeeklyReportModal.tsx` (`buildDynamicWeeklyReport`)：清空示范数据后，多维统计报表、效能评级与 AI 家庭周报全部根据真实任务与打卡动态计算，彻底消除写死假数据。
   3. `src/App.tsx` & `functions/api/sync.ts`：对公共示范账号 `lizihan` 实施本地隔离保护，避免访客清空示范数据时污染云端 D1 公共母本；独立注册账号全量读写 D1。
 
+### 51.la 网站数据统计与访客分析集成 (2026-10-20)
+- 在 `index.html` 中配置挂载 51.la 官方最新 JavaScript SDK 数据统计代码 (`id: 28PaUV5XW7ttjXGI`, `ck: 28PaUV5XW7ttjXGI`)，实现全站访客流量、停留时长与页面交互数据的实时监测与分析。
+
+### 报表空数据源强制归零 (`createZeroDeskSummary`) 与 Cloudflare Pages 构建修复 (2026-10-20)
+- **`calculateDeskSummary` 强制归零逻辑**：当当前账号数据源（`localStorage` 或 D1 同步数据）为空或已清除示范数据时，强制返回零值对象 `createZeroDeskSummary`，确保 UI 报表与成长档案展示为「暂无数据」而非写死的历史示范数字。
+- **Cloudflare Pages 构建锁文件修复**：从 Git 仓库移除由高版本 Bun 生成的 `bun.lock` (`lockfileVersion: 2`) 并加入 `.gitignore`，避免 Cloudflare Pages 旧版 `bun@1.2.15` 误识别报错 `UnknownLockfileVersion`，恢复标准 `npm` (`package-lock.json`) 自动构建流水线。
